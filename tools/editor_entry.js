@@ -231,6 +231,14 @@ export function create(parent, { onSave, onChange } = {}) {
     markLine(line) {
       view.dispatch({ effects: setExec.of(line || 0) });
     },
+    scrollTo(line) {
+      try {
+        const info = view.state.doc.line(Math.min(line, view.state.doc.lines));
+        view.dispatch({ effects: EditorView.scrollIntoView(info.from, { y: "center" }) });
+      } catch {
+        /* 行号超出范围时不动 */
+      }
+    },
     setDiagnostics(list) {
       const items = [];
       for (const item of list || []) {

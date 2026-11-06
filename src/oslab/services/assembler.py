@@ -21,7 +21,7 @@ def assemble(source, out_path, includes=()):
     asm = out_path + ".asm"
     with open(asm, "w", newline="\n", encoding="ascii", errors="replace") as fh:
         fh.write(source)
-    args = [config.NASM, "-f", "bin", asm, "-o", out_path]
+    args = [config.NASM, "-f", "bin", asm, "-o", out_path, "-l", out_path + ".lst"]
     for directory in includes:
         args[1:1] = ["-i", directory + os.sep]
     result = subprocess.run(args, capture_output=True, text=True)

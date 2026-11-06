@@ -15,7 +15,7 @@ from ..core.arbiter import Arbiter
 from ..core.errors import BackendError, BadTransition, OsLabError
 from ..display.rfb import RfbSource
 from ..display.vnc import VncSource
-from . import build, workspace
+from . import build, sourcemap, workspace
 from .serial import SerialBuffer
 
 REG_LINE = re.compile(r"^(eip|rip):\s*(?:0x)?([0-9a-fA-F]+)")
@@ -34,6 +34,7 @@ class Session:
         self.last_error = ""
         self.cursor = 0
         self.bps = set()
+        self.source_map = {}
         self.want_run = False
         self.cache = {}
 
@@ -63,6 +64,7 @@ class Session:
             self.arbiter.to(state.BOOTING, "assemble")
             try:
                 build.build(text, name, self.image)
+                self.source_map = sourcemap.load(self.image)
                 self._teardown()
                 self.backend = QemuBackend(self.dir, self.image)
                 self.backend.start()
@@ -219,6 +221,7 @@ class Session:
             data["disasm"] = self.backend.disassemble(eip, 8)
             data["mem"] = self.backend.hexdump(eip, 128)
             data["stack"] = self.backend.dump_stack(self._reg("esp"))
+            data["line"] = sourcemap.line_at(self.source_map, eip)
         except Exception as exc:            # a timeout must not lose the view
             data["error"] = "读取超时：%s" % exc
         data["state"] = self.arbiter.state

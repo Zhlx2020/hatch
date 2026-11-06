@@ -27,7 +27,14 @@ async function guarded(fn) {
 }
 
 async function refresh() {
-  panels.render(await api.state());
+  const snap = await api.state();
+  panels.render(snap);
+  const own = editor.file();
+  if (snap.state === "stopped" && snap.line && own && snap.file === own) {
+    editor.markLine(snap.line);
+  } else {
+    editor.markLine(0);
+  }
 }
 
 async function boot() {

@@ -113,6 +113,11 @@ export function install() {
   });
 }
 
+let lastMark = 0;
+
 export function markLine(line) {
+  if (line === lastMark) return;
+  lastMark = line;
   view.markLine(line);
+  if (line) view.scrollTo(line);
 }
