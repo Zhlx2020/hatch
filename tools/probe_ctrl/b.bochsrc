@@ -1,0 +1,6 @@
+romimage: file="C:\software\Bochs-3.0/BIOS-bochs-latest"
+vgaromimage: file="C:\software\Bochs-3.0/VGABIOS-elpin-2.40"
+megs: 32
+floppya: 1_44="C:\Users\zlx\Documents\deepseek-harness\default-workspace\oslab\tools\probe_ctrl\b.img", status=inserted
+boot: a
+display_library: rfb, options="timeout=300, no_gui_console"

@@ -1,0 +1,44 @@
+async function json(path, options) {
+  const res = await fetch(path, options);
+  return res.json().catch(() => ({}));
+}
+
+const post = (path, body) =>
+  json(path, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body || {}),
+  });
+
+export const state = () => json("/api/state");
+
+const enc = (path) => path.split("/").map(encodeURIComponent).join("/");
+
+export const tree = () => json("/api/tree");
+export const readFile = (path) => json("/api/file/" + enc(path));
+export const writeFile = (path, text) =>
+  json("/api/file/" + enc(path), {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ text }),
+  });
+
+export const createNode = (path, kind) => post("/api/node", { path, kind });
+export const renameNode = (path, name) => post("/api/node/rename", { path, name });
+export const moveNode = (path, dir) => post("/api/node/move", { path, dir });
+export const deleteNode = (path) =>
+  json("/api/node?path=" + encodeURIComponent(path), { method: "DELETE" });
+
+export const run = (name) => post("/api/run", { name });
+export const step = () => post("/api/step");
+export const stepOver = () => post("/api/step-over");
+export const cont = () => post("/api/cont");
+export const pause = () => post("/api/pause");
+export const reset = () => post("/api/reset");
+
+export const breakpoints = () => json("/api/bps");
+export const addBreakpoint = (addr) => post("/api/bp", { addr });
+export const dropBreakpoint = (addr) =>
+  json("/api/bp/" + addr, { method: "DELETE" });
+export const memory = (addr, count) => post("/api/mem", { addr, count });
+export const tables = () => post("/api/tables");

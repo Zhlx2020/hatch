@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<title>OS Lab</title>
+<link rel="stylesheet" href="/ui/styles/base.css" />
+<link rel="stylesheet" href="/ui/styles/layout.css" />
+<link rel="stylesheet" href="/ui/styles/panels.css" />
+<script>
+  window.__err = "";
+  window.addEventListener("error", (e) => { window.__err += e.message + " @ " + e.filename + ":" + e.lineno + "\n"; });
+  window.addEventListener("unhandledrejection", (e) => { window.__err += "REJ " + e.reason + "\n"; });
+</script>
+</head>
+<body>
+<header>
+  <span class="title">OS LAB</span>
+  <button id="run" class="primary">运行</button>
+  <button id="pause">暂停</button>
+  <button id="cont">继续</button>
+  <button id="step">单步</button>
+  <button id="step-over">越过</button>
+  <button id="reset">复位</button>
+  <span id="status">待机</span>
+</header>
+
+<section id="files" class="pane">
+  <h2>文件 <button id="new-file" class="mini">＋</button><button id="new-dir" class="mini">＋目录</button><button id="del-file" class="mini">－</button></h2>
+  <div class="body" id="tree"></div>
+  <div id="tree-menu"></div>
+</section>
+
+<section id="editor" class="pane">
+  <h2><span id="file-title">—</span></h2>
+  <div class="body"><textarea id="code" spellcheck="false" autocomplete="off"></textarea></div>
+</section>
+
+<aside>
+  <div id="screenwrap"><canvas id="screen" width="720" height="478" tabindex="0"></canvas></div>
+  <div id="panels">
+    <section class="pane"><h2>寄存器 / 断点</h2><pre id="regs">—</pre><pre id="bps" class="sub">无</pre></section>
+    <section class="pane"><h2>反汇编</h2><pre id="disasm">—</pre></section>
+    <section class="pane"><h2>内存 @eip</h2><pre id="mem">—</pre></section>
+    <section class="pane"><h2>串口</h2><pre id="serial"></pre></section>
+  </div>
+</aside>
+
+<script type="module" src="/ui/js/boot.js"></script>
+</body>
+</html>

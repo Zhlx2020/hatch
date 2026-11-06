@@ -1,0 +1,10 @@
+.run/
+.work/
+__pycache__/
+*.pyc
+node_modules/
+*.bin
+*.img
+*.img.asm
+*.img.dis
+*.lst

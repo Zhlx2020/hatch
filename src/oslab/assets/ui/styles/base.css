@@ -1,0 +1,65 @@
+:root {
+  --bg: #0e1216;
+  --panel: #141a20;
+  --edge: #1e262e;
+  --text: #c6d0d8;
+  --dim: #6c7a86;
+  --accent: #5fbf92;
+  --danger: #d2686b;
+  --screen-w: 720px;
+  --screen-h: 478px;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font: 12px/1.5 "Cascadia Mono", Consolas, monospace;
+}
+
+button {
+  font: inherit;
+  color: var(--text);
+  background: #1a222a;
+  border: 1px solid var(--edge);
+  border-radius: 3px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+button:hover { border-color: var(--accent); }
+button.primary { color: var(--bg); background: var(--accent); border-color: var(--accent); }
+button:disabled { opacity: .45; cursor: default; }
+
+.pane {
+  background: var(--panel);
+  border: 1px solid var(--edge);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+.pane > h2 {
+  margin: 0;
+  padding: 5px 9px;
+  font-size: 11px;
+  font-weight: normal;
+  letter-spacing: .12em;
+  color: var(--dim);
+  border-bottom: 1px solid var(--edge);
+}
+.pane > .body { flex: 1; overflow: auto; min-height: 0; }
+
+button.mini {
+  padding: 0 5px;
+  margin-left: 4px;
+  font-size: 11px;
+  line-height: 15px;
+}
+.pane > h2 { display: flex; align-items: center; gap: 4px; }
+.pane > h2 button.mini { margin-left: 0; }
+#regs { flex: 1; }
+.sub { border-top: 1px solid var(--edge); color: var(--accent); max-height: 35%; }
