@@ -1,0 +1,11 @@
+# 由界面写入，可手工编辑
+
+[run]
+label = "运行"
+hint = ""
+action = "run"
+pause_at_entry = true
+
+[qemu]
+profile = "floppy"
+extra = []

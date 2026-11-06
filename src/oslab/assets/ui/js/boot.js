@@ -32,6 +32,7 @@ async function guarded(fn) {
 async function refresh() {
   const snap = await api.state();
   panels.render(snap);
+  if (panels.serialOn()) panels.setSerial((await api.serial()).text || "");
   const live = snap.state === "running" || snap.state === "stopped";
   if (snap.state === "booting") hint.show("正在加载中…", true);
   else if (snap.state === "faulted") hint.show(snap.error || "启动失败", true);
@@ -45,7 +46,15 @@ async function refresh() {
   }
 }
 
-async function boot() {
+async function runAction(act) {
+  document.getElementById("run-menu").classList.remove("open");
+  if (act === "settings") return settings.open();
+  if (act === "reset") return guarded(api.reset);
+  if (act === "build") return boot(true);
+  return boot();
+}
+
+async function boot(forceBuild) {
   let path = editor.file() || tree.selected();
   if (path && !C_RUNNABLE.some((suffix) => path.endsWith(suffix))) {
     const first = document.querySelector("#tree .row.file");
@@ -65,7 +74,8 @@ async function boot() {
     say("构建中…");
     panels.clearSerial();
     window.__ran = (window.__ran || []).concat([path, editor.breakpoints().length]);
-    const result = await api.run(path, editor.breakpoints(), settings.current().run.action === "build");
+    const onlyBuild = !!forceBuild || settings.current().run.action === "build";
+    const result = await api.run(path, editor.breakpoints(), onlyBuild);
     if (result.error) say(result.error, true);
     else {
       say("已启动 " + path);
@@ -76,7 +86,18 @@ async function boot() {
   });
 }
 
-document.getElementById("run").addEventListener("click", boot);
+document.getElementById("run").addEventListener("click", () => runAction("main"));
+document.getElementById("run-more").addEventListener("click", (ev) => {
+  ev.stopPropagation();
+  document.getElementById("run-menu").classList.toggle("open");
+});
+document.getElementById("run-menu").addEventListener("click", (ev) => {
+  const item = ev.target.closest("button[data-act]");
+  if (item) runAction(item.dataset.act);
+});
+document.addEventListener("click", () => {
+  document.getElementById("run-menu").classList.remove("open");
+});
 for (const button of document.querySelectorAll("[data-open]")) {
   button.addEventListener("click", () => detail.open(button.dataset.open));
 }
@@ -143,6 +164,7 @@ document.getElementById("templates-close").addEventListener("click",
 
 editor.install();
 settings.install();
+settings.load().then((conf) => panels.serialMode(conf.qemu.profile === "terminal"));
 detail.install();
 input.install();
 screen.connect();

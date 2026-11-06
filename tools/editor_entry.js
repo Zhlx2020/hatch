@@ -11,7 +11,15 @@ import {
 import { tags } from "@lezer/highlight";
 import { highlightSelectionMatches, searchKeymap } from "@codemirror/search";
 import { setDiagnostics } from "@codemirror/lint";
-import { EditorState, Prec, RangeSet, RangeSetBuilder, StateEffect, StateField } from "@codemirror/state";
+import {
+  Compartment,
+  EditorState,
+  Prec,
+  RangeSet,
+  RangeSetBuilder,
+  StateEffect,
+  StateField,
+} from "@codemirror/state";
 import {
   Decoration,
   EditorView,
@@ -27,6 +35,7 @@ import {
 } from "@codemirror/view";
 
 import REGISTERS from "./nasm_regs.js";
+import { KEYWORDS, LIBRARY, PREPROCESSOR, TYPES, documentWords } from "./clike.js";
 import { WORDS, DIRECTIVES } from "./nasm_words.js";
 
 const LABEL = /^[A-Za-z_.$][\w.$]*:/;
@@ -56,6 +65,42 @@ function token(stream) {
 }
 
 const nasm = StreamLanguage.define({ name: "nasm", token });
+
+// C：注释、字符串、字符、预处理、数字、关键字/类型分开上色
+const C_NUMBER = /^(?:0[xX][0-9a-fA-F]+|\d+\.?\d*(?:[eE][-+]?\d+)?)[uUlLfF]*/;
+const C_WORD = /^[A-Za-z_]\w*/;
+
+function cToken(stream) {
+  if (stream.eatSpace()) return null;
+  if (stream.match("//")) {
+    stream.skipToEnd();
+    return "comment";
+  }
+  if (stream.match("/*")) {
+    while (!stream.eol()) {
+      if (stream.match("*/")) break;
+      stream.next();
+    }
+    return "comment";
+  }
+  if (stream.match(/^"(?:[^"\\]|\\.)*"?/)) return "string";
+  if (stream.match(/^'(?:[^'\\]|\\.)*'?/)) return "string";
+  if (stream.sol() && stream.match(/^\s*#[A-Za-z]+/)) return "meta";
+  if (stream.match(C_NUMBER)) return "number";
+  const word = stream.match(C_WORD);
+  if (word) {
+    const text = word[0];
+    if (KEYWORDS.includes(text)) return "keyword";
+    if (TYPES.includes(text)) return "typeName";
+    if (LIBRARY.includes(text)) return "typeName";
+    return "variableName";
+  }
+  if (stream.match(/^[{}()\[\];,.+\-*/%&|^~!<>=?:]+/)) return "operator";
+  stream.next();
+  return null;
+}
+
+const clike = StreamLanguage.define({ name: "c", token: cToken });
 
 const theme = EditorView.theme(
   {
@@ -216,6 +261,25 @@ function labels(state) {
   return out;
 }
 
+const C_KEYWORD_OPTIONS = [...KEYWORDS, ...TYPES, ...LIBRARY, ...PREPROCESSOR];
+
+function cCompletions(context) {
+  const word = context.matchBefore(/[#A-Za-z_]\w*/);
+  if (!word) return null;
+  if (word.from === word.to && !context.explicit) return null;
+  const near = context.state.doc.toString();
+  return {
+    from: word.from,
+    options: [
+      ...C_KEYWORD_OPTIONS.map((label) => ({ label, type: "keyword" })),
+      ...documentWords(near)
+        .filter((label) => label.startsWith(word.text) && label !== word.text)
+        .slice(0, 60)
+        .map((label) => ({ label, type: "variable" })),
+    ],
+  };
+}
+
 function nasmCompletions(context) {
   const word = context.matchBefore(/[A-Za-z_.$%][\w.$]*/);
   if (!word) return null;
@@ -223,7 +287,19 @@ function nasmCompletions(context) {
   return { from: word.from, options: [...words(), ...labels(context.state)] };
 }
 
+function langSupport(kind) {
+  return [
+    kind === "c" ? clike : nasm,
+    autocompletion({
+      override: [kind === "c" ? cCompletions : nasmCompletions],
+      icons: false,
+      maxRenderedOptions: 20,
+    }),
+  ];
+}
+
 export function create(parent, { onSave, onChange, onToggleLine } = {}) {
+  const langBox = new Compartment();
   const state = EditorState.create({
     doc: "",
     extensions: [
@@ -234,7 +310,7 @@ export function create(parent, { onSave, onChange, onToggleLine } = {}) {
       bracketMatching(),
       closeBrackets(),
       history(),
-      autocompletion({ override: [nasmCompletions], icons: false, maxRenderedOptions: 20 }),
+      langBox.of(langSupport("asm")),
       highlightSelectionMatches(),
       nasm,
       theme,
@@ -299,6 +375,9 @@ export function create(parent, { onSave, onChange, onToggleLine } = {}) {
       });
     },
     focus: () => view.focus(),
+    setLanguage(kind) {
+      view.dispatch({ effects: langBox.reconfigure(langSupport(kind)) });
+    },
     markLine(line) {
       view.dispatch({ effects: setExec.of(line || 0) });
     },

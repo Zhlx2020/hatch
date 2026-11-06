@@ -3,6 +3,7 @@ import os
 import re
 import socket
 import threading
+from contextlib import contextmanager
 import time
 import traceback
 import time
@@ -40,6 +41,7 @@ class Session:
         self.line_map = {}
         self.want_run = False
         self.cache = {}
+        self.held = False
         self.stale = 0.0
         self.filling = False
 
@@ -97,6 +99,7 @@ class Session:
                 self.tune = settings.load()
                 self.backend = QemuBackend(self.dir, self.image, self.tune)
                 self.backend.start()
+                self.backend.on_stop = self._on_stop
                 if not self._await_ready():
                     raise OsLabError("模拟器未就绪")
                 self.bps.clear()
@@ -113,14 +116,14 @@ class Session:
                     time.sleep(0.02)
                 self.cursor = 0
                 self.file = name
+                self.arbiter.to(state.RUNNING, "booted")
                 if self.tune["run"]["pause_at_entry"]:
-                    hit = self.backend.cont()
-                else:
-                    hit = "stopped"       # 停在入口等用户放行
-                if hit == "stopped":
-                    self.arbiter.to(state.STOPPED, "hit")
-                else:
-                    self.arbiter.to(state.RUNNING, "booted")
+                    self.backend.cont()
+                    # 入口就有断点时会立刻停下来，等一小会儿再看
+                    for _ in range(30):
+                        if self.arbiter.state != state.RUNNING:
+                            break
+                        time.sleep(0.01)
 
                 self.last_error = ""
                 self.placed_bps = placed
@@ -181,18 +184,32 @@ class Session:
     # control --------------------------------------------------------
     def cont(self):
         self.arbiter.guard(state.STOPPED, state.RUNNING)
-        result = self._need_backend().cont()
-        if result == "stopped":
-            self.arbiter.to(state.STOPPED, "hit")
-        else:
-            self.arbiter.to(state.RUNNING, "cont")
-        return result
+        self.arbiter.to(state.RUNNING, "cont")     # 先立状态，回调才有处落脚
+        self._need_backend().cont()
+        return self.arbiter.state
+
+    def _on_stop(self, packet):
+        """gdbstub 推上来的停机（断点、暂停、结束）。跑在读线程里，只碰状态机。"""
+        try:
+            with open(".run/stop.log", "a") as fh:
+                fh.write("%.3f %s %s\n" % (time.time(), packet[:12], self.arbiter.state))
+        except OSError:
+            pass
+        if self.arbiter.state not in (state.RUNNING, state.BOOTING):
+            return
+        try:
+            self.arbiter.to(state.STOPPED, "hit" if packet[:1] == b"T" else "exit")
+        except BadTransition:
+            pass
 
     def pause(self):
-        self.arbiter.guard(state.RUNNING)
-        self._need_backend().pause()
-        self.arbiter.to(state.STOPPED, "pause")
-        return "paused"
+        with self._guard:          # 等补读那一组走完，状态已settle
+            self.arbiter.guard(state.RUNNING, state.STOPPED)
+            if self.arbiter.state == state.STOPPED:
+                return "paused"
+            self._need_backend().pause()
+            self.arbiter.to(state.STOPPED, "pause")
+            return "paused"
 
     def step(self):
         self.arbiter.guard(state.RUNNING, state.STOPPED)
@@ -228,18 +245,53 @@ class Session:
         return self.serial.tail() if self.serial else ""
 
     # observation ----------------------------------------------------
+    @contextmanager
+    def _keep_running(self):
+        """读寄存器或内存会让 QEMU 停下，本来在跑就得放它回去。
+
+        不然每次面板补读都会把客户机按在原地：画面不刷新，键盘也读不到。
+        """
+        # 一次只放一组“按停→读→放开”进去，否则几路轮询会把 gdb 流搅乱。
+        with self._guard:
+            resume = self.arbiter.state == state.RUNNING and self.backend is not None \
+                and self.backend.alive
+            if resume:
+                # 运行中的读不会被 gdbstub 立刻回答，得先按停（0x03）再读。
+                try:
+                    self.backend.pause()
+                except (BackendError, OSError):
+                    resume = False
+            self.held = resume
+            try:
+                yield
+            finally:
+                # 按停是我们自己发的，放开也由我们负责（状态已被回调改成 stopped）
+                if resume:
+                    self._resume()
+                self.held = False
+
+    def _resume(self):
+        try:
+            self.arbiter.to(state.RUNNING, "resume")
+            self.backend.cont()
+        except (BackendError, BadTransition, OSError):
+            pass
+
     def reg_detail(self):
-        backend = self._need_backend()
-        return {"regs": backend.reg_map(), "eip": "%08x" % backend.eip(),
-                "state": self.arbiter.state}
+        with self._keep_running():
+            backend = self._need_backend()
+            return {"regs": backend.reg_map(), "eip": "%08x" % backend.eip(),
+                    "state": self.arbiter.state}
 
     def set_reg(self, name, value):
         backend = self._need_backend()
-        backend.set_reg(name, value)
-        return "%08x" % backend._reg_value(name)
+        with self._keep_running():
+            backend.set_reg(name, value)
+            return "%08x" % backend._reg_value(name)
 
     def mem_rows(self, addr, count=256):
-        rows = self._need_backend().mem_rows(addr & 0xFFFFFFF0, min(int(count), 1024))
+        with self._keep_running():
+            rows = self._need_backend().mem_rows(addr & 0xFFFFFFF0, min(int(count), 1024))
         return {"addr": "%08x" % addr, "rows": rows}
 
     def line_addr(self, path, line):
@@ -247,28 +299,28 @@ class Session:
         return linemap.lookup(self.line_map, path, int(line))
 
     def disasm_rows(self, addr, count=32, syntax="intel"):
-        rows = self._need_backend().disasm_rows(addr, min(int(count), 256), syntax)
-        return {"addr": "%08x" % addr, "rows": rows, "eip": "%08x" % self.eip()}
+        with self._keep_running():
+            rows = self._need_backend().disasm_rows(addr, min(int(count), 256), syntax)
+            return {"addr": "%08x" % addr, "rows": rows, "eip": "%08x" % self.eip()}
 
     def snapshot(self):
         if not self.backend or not self.backend.alive:
             return {"state": self.arbiter.state, "error": self.last_error, "file": self.file}
-        if self.arbiter.state in (state.RUNNING, state.BOOTING):
+        live = self.arbiter.state
+        if self.held and live == state.STOPPED:
+            live = state.RUNNING       # 临时按停补读期间，对外仍算运行中
+        if live in (state.RUNNING, state.BOOTING):
             text, cursor = self.serial.since(self.cursor) if self.serial else ("", 0)
+            try:
+                with open(".run/ser.log", "a") as fh:
+                    fh.write("%r cur=%s new=%s buf=%s\n" % (text[:20], self.cursor, cursor,
+                             len(self.serial.tail()) if self.serial else -1))
+            except OSError:
+                pass
             self.cursor = cursor
-            data = dict(self.cache, state=self.arbiter.state, file=self.file,
+            # 运行中不碰 gdb：画面和串口照常，寄存器停在上一帧的值
+            return dict(self.cache, state=live, file=self.file,
                         serial=text, error=self.last_error)
-            if self.arbiter.state == state.BOOTING:
-                # 启动过程里也要看得见机器：此时客户机停在复位点，读一下无害。
-                data.update(self._snapshot())
-            elif time.monotonic() - self.stale > 1.5 and not self.filling:
-                # 运行中低频补读一次，面板不至于一直是空的
-                self.filling = True
-                try:
-                    data.update(self._snapshot())
-                finally:
-                    self.filling = False
-            return data
         return self._snapshot()
 
     def _snapshot(self):
@@ -276,13 +328,14 @@ class Session:
         for key in ("state", "error"):
             data.pop(key, None)
         try:
-            eip = self.eip()
-            data["eip"] = "%08x" % eip
-            data["regs"] = self.backend.registers()
-            data["disasm"] = self.backend.disassemble(eip, 8)
-            data["mem"] = self.backend.hexdump(eip, 128)
-            data["stack"] = self.backend.dump_stack(self._reg("esp"))
-            data["line"] = sourcemap.line_at(self.source_map, eip)
+            with self._keep_running():
+                eip = self.eip()
+                data["eip"] = "%08x" % eip
+                data["regs"] = self.backend.registers()
+                data["disasm"] = self.backend.disassemble(eip, 8)
+                data["mem"] = self.backend.hexdump(eip, 128)
+                data["stack"] = self.backend.dump_stack(self._reg("esp"))
+                data["line"] = sourcemap.line_at(self.source_map, eip)
         except Exception as exc:            # a timeout must not lose the view
             data["error"] = "读取超时：%s" % exc
         data["state"] = self.arbiter.state
@@ -308,7 +361,9 @@ class Session:
         return "0"
 
     def dump_memory(self, addr, count):
-        return self._need_backend().hexdump(addr, count)
+        with self._keep_running():
+            return self._need_backend().hexdump(addr, count)
 
     def tables(self):
-        return {"gdt": self._need_backend().gdt(), "idt": self._need_backend().idt()}
+        with self._keep_running():
+            return {"gdt": self._need_backend().gdt(), "idt": self._need_backend().idt()}

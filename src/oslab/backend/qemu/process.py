@@ -1,4 +1,4 @@
-"""QEMU process: vnc screen, gdb stub and serial on fixed local ports."""
+"""QEMU process: gdb stub and serial on fixed local ports, screen from the profile."""
 import os
 import subprocess
 import time
@@ -6,25 +6,20 @@ import time
 from ... import config
 from ...services import settings
 
+# 托管项：端口固定，模板只决定机器怎么起
 ARGS = [
-    "-boot", "a",
-    "-display", "vnc=127.0.0.1:%d" % config.VNC_HOST_PORT,
     "-gdb", "tcp:%s:%d" % (config.HOST, config.GDB_PORT),
     "-serial", "tcp:%s:%d,server=on,wait=off" % (config.HOST, config.SERIAL_PORT),
     "-monitor", "none",
-    "-drive", "file=%s,if=floppy,format=raw",
 ]
 
 
 def command(image, tune=None):
-    """完整命令行：先托管项，再用户配置，最后镜像与暂停开关。"""
+    """完整命令行：托管项 + 模板 + 附加参数，最后固定加 -S。"""
     tune = tune or settings.load()
-    args = [config.QEMU, "-m", str(tune["qemu"]["memory"])]
-    if tune["qemu"]["machine"]:
-        args += ["-machine", tune["qemu"]["machine"]]
-    if tune["qemu"]["cpu"]:
-        args += ["-cpu", tune["qemu"]["cpu"]]
-    args += [a % image if "%s" in a else a for a in ARGS]
+    args = [config.QEMU]
+    args += ARGS
+    args += settings.profile_args(tune["qemu"]["profile"], image)
     args += tune["qemu"]["extra"]
     args.append("-S")          # 一定从复位停住，避免断点被抢跑
     return args

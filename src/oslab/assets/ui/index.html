@@ -16,7 +16,17 @@
 <body>
 <header>
   <span class="title">OS LAB</span>
-  <button id="run" class="primary">运行</button>
+  <div id="run-group">
+    <button id="run" class="primary">运行</button>
+    <button id="run-more" class="primary" title="更多启动方式">▾</button>
+    <div id="run-menu">
+      <button data-act="run">构建并运行</button>
+      <button data-act="build">只构建</button>
+      <button data-act="reset">软复位（回复位向量）</button>
+      <button data-act="reboot">重新构建并启动</button>
+      <button data-act="settings">启动设置…</button>
+    </div>
+  </div>
   <button id="pause">暂停</button>
   <button id="cont">继续</button>
   <button id="step">单步</button>
@@ -38,7 +48,8 @@
 </section>
 
 <aside>
-  <div id="screenwrap"><canvas id="screen" width="720" height="478" tabindex="0"></canvas><div id="screen-hint" class="open"><span class="spin"></span><span class="word">待机，点「运行」启动</span></div></div>
+  <div id="screenwrap"><canvas id="screen" width="720" height="478" tabindex="0"></canvas><div id="screen-hint" class="open"><span class="spin"></span><span class="word">待机，点「运行」启动</span></div>
+      <pre id="serial-view" hidden></pre></div>
   <div id="panels">
     <section class="pane"><h2><span>寄存器</span><span class="tag">断点</span><button class="mini more" data-open="regs">展开</button></h2><div class="body"><div id="regs" class="rgrid"></div><div id="bps" class="bps"></div></div></section>
     <section class="pane"><h2><span>反汇编</span><button class="mini more" data-open="dis">展开</button></h2><div class="body"><div id="disasm" class="drows"></div></div></section>

@@ -54,6 +54,7 @@ export const check = (path, text) => post("/api/check", { path, text });
 export const line = (path, row) =>
   json("/api/line?path=" + encodeURIComponent(path) + "&line=" + row);
 
+export const serial = () => json("/api/serial");
 export const settings = () => json("/api/settings");
 export const saveSettings = (data) =>
   json("/api/settings", {

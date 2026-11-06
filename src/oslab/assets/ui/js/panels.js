@@ -124,13 +124,45 @@ export function render(snap) {
   const label = LABELS[snap.state] || snap.state || "未知";
   statusEl.textContent = snap.error ? `${label}：${snap.error}` : label;
   statusEl.classList.toggle("bad", Boolean(snap.error) || snap.state === "faulted");
+  if (snap.serial) feedSerial(snap.serial);
   if (snap.regs !== undefined) drawRegs(snap.regs);
   if (snap.disasm !== undefined) drawDisasm(snap.disasm, snap);
   if (snap.mem !== undefined) drawMem(snap.mem);
   if (snap.bps) drawBps(snap.bps);
 }
 
-// 串口不再占用界面：客户机写 COM1 的文本仍由 /api/serial 保留，脚本可用。
+// 只有在串口模板下才把串口当屏幕：其余时候文本仍留在 /api/serial 给脚本用。
+const serialView = document.getElementById("serial-view");
+let serialText = "";
+
+export function serialOn() {
+  return !serialView.hidden;
+}
+
+export function setSerial(text) {
+  if (!serialView || serialView.textContent === text) return;
+  serialView.textContent = text || "";
+  serialView.scrollTop = serialView.scrollHeight;
+}
+
+export function serialMode(on) {
+  document.body.classList.toggle("serial-mode", !!on);
+  serialView.hidden = !on;
+  if (on) serialView.scrollTop = serialView.scrollHeight;
+}
+
 export async function loadSerial() {}
 
-export function clearSerial() {}
+export function clearSerial() {
+  serialText = "";
+  if (serialView) serialView.textContent = "";
+}
+
+function feedSerial(text) {
+  if (!text) return;
+  serialText = (serialText + text).slice(-4000);
+  if (serialView) {
+    serialView.textContent = serialText;
+    serialView.scrollTop = serialView.scrollHeight;
+  }
+}

@@ -19,6 +19,7 @@ class QemuBackend:
         self._proc = QemuProcess(session_dir, image, tune)
         self._image = image
         self._rsp = None
+        self.on_stop = None            # 会话注册：状态是被推上来的
         self._lines = []
         self._att = []
 
@@ -28,6 +29,8 @@ class QemuBackend:
         self._rsp = Rsp(config.HOST, config.GDB_PORT)
         self._lines = disasm.load(self._image, "intel")
         self._att = disasm.load(self._image, "att")
+        # 会话在 start() 之后才挂回调，这里转发一层保证拿到最新的
+        self._rsp.on_stop = lambda body: self.on_stop and self.on_stop(body)
         self._rsp.stop_reason()
 
     def stop(self):
@@ -42,8 +45,8 @@ class QemuBackend:
 
     # execution ------------------------------------------------------
     def cont(self):
-        stop = self._need().cont()
-        return "stopped" if stop[:1] == b"T" else "running"
+        """发完就回；真停下来由 on_stop 回调通知。"""
+        self._need().cont()
 
     def step(self):
         self._need().step()

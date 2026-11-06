@@ -137,6 +137,7 @@ class VncSource:
                                 fh.write("%d %s\n" % (len(msg.data),
                                                       " ".join("%02x" % b for b in msg.data)))
                             self._writer.write(msg.data)
+                            await self._writer.drain()
                         except OSError:
                             pass
         finally:

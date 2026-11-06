@@ -9,10 +9,19 @@ from . import routes
 
 
 def build():
-    app = web.Application()
+    app = web.Application(middlewares=[_fresh])
     routes.install(app)
     app.router.add_static("/ui/", config.UI_DIR)
     return app
+
+
+@web.middleware
+async def _fresh(request, handler):
+    """界面文件每次都要回源：不然改完 JS，浏览器还在用旧的。"""
+    response = await handler(request)
+    if request.path.startswith("/ui/"):
+        response.headers["Cache-Control"] = "no-cache"
+    return response
 
 
 def run(port, ready=None, on_ready=None):

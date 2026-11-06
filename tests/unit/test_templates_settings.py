@@ -44,38 +44,55 @@ def test_manifest_validation(workdir):
         project.load("p", str(root))
 
 
-def test_settings_round_trip_and_whitelist(workdir):
+def test_settings_round_trip(workdir):
     data = settings.save({"run": {"label": "跑", "hint": "说明", "action": "build",
                                   "pause_at_entry": False},
-                          "qemu": {"memory": 48, "machine": "isapc",
-                                   "extra": ["-no-reboot", "-smp", "2"]}},
+                          "qemu": {"profile": "cold", "extra": ["-fsdev", "local,path=x"]}},
                          str(workdir))
-    assert data["qemu"]["memory"] == 48
-    assert "-smp=2" in data["qemu"]["extra"]
+    assert data["qemu"]["profile"] == "cold"
+    assert "-fsdev=local,path=x" in data["qemu"]["extra"]
     again = settings.load(str(workdir))
     assert again["run"]["action"] == "build"
-    assert again["qemu"]["machine"] == "isapc"
+    assert again["qemu"]["profile"] == "cold"
 
 
-def test_settings_rejects_unknown_and_managed(workdir):
+def test_settings_rejects_unknown_flag_and_profile(workdir):
     with pytest.raises(OsLabError, match="不认识"):
         settings.save({"qemu": {"extra": ["-nonsense"]}}, str(workdir))
-    with pytest.raises(OsLabError, match="界面管理"):
+    with pytest.raises(OsLabError, match="没有这个模板"):
+        settings.save({"qemu": {"profile": "nope"}}, str(workdir))
+
+
+def test_settings_rejects_managed_flags(workdir):
+    with pytest.raises(OsLabError, match="模板管理"):
         settings.save({"qemu": {"extra": ["-m", "64"]}}, str(workdir))
 
 
-def test_settings_memory_bounds(workdir):
-    with pytest.raises(OsLabError, match="4 到 512"):
-        settings.save({"qemu": {"memory": 2}}, str(workdir))
+def test_catalogue_has_tested_profiles():
+    ids = {item["id"] for item in settings.catalogue()}
+    assert {"floppy", "disk", "iso", "terminal", "q35"} <= ids
+    for item in settings.catalogue():
+        assert item["desc"] and item["screen"] in ("vnc", "serial")
 
 
-def test_qemu_command_uses_settings(workdir):
+def test_profile_args_are_complete():
+    """每个模板都得自己带启动设备与显示，托管项只留端口。"""
+    for name in settings.PROFILES:
+        args = settings.profile_args(name, "/tmp/x.img")
+        assert "-boot" in args and "-m" in args and "-M" in args
+        assert any(a.startswith("file=") or a == "/tmp/x.img" or
+                   a.endswith("x.img") for a in args)
+        assert "-display" in args
+        assert "-gdb" not in args and "-serial" not in args
+
+
+def test_qemu_command_uses_profile(workdir):
     from oslab.backend.qemu import process
 
     tune = {"run": {"pause_at_entry": False},
-            "qemu": {"memory": 64, "machine": "isapc", "cpu": "486",
-                     "extra": ["-no-reboot"]}}
+            "qemu": {"profile": "smp2", "extra": ["-no-reboot"]}}
     args = process.command("/tmp/x.img", tune)
-    assert "-m" in args and args[args.index("-m") + 1] == "64"
-    assert "isapc" in args and "486" in args and "-no-reboot" in args
-    assert "-S" in args
+    assert "-smp" in args and args[args.index("-smp") + 1] == "2"
+    assert "-no-reboot" in args
+    assert args[-1] == "-S"
+    assert "-gdb" in args and "-serial" in args

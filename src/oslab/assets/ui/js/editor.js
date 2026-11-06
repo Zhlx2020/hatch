@@ -56,9 +56,12 @@ function showProblems(list) {
   problemsEl.classList.toggle("open", (list || []).length > 0);
 }
 
+const C_FILES = /\.(c|h)$/i;
+
 export function show(path, text) {
   if (path !== current) pending = new Map();
   current = path;
+  view.setLanguage(C_FILES.test(path || "") ? "c" : "asm");
   dead = !text && !path;
   view.setValue(text || "");
   view.setDiagnostics([]);

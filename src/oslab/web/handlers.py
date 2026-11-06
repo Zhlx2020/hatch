@@ -93,10 +93,15 @@ async def file_write(request):
 
 # observation ----------------------------------------------------------
 async def regs(_request):
+    import traceback
+
     try:
         return web.json_response(await asyncio.to_thread(session().reg_detail))
     except OsLabError as exc:
         return web.json_response({"error": str(exc)}, status=400)
+    except Exception as exc:  # TEMP
+        return web.json_response({"crash": repr(exc),
+                                  "trace": traceback.format_exc()}, status=500)
 
 
 async def reg_set(request):
@@ -170,7 +175,10 @@ async def templates_apply(request):
 
 
 async def settings_get(request):
-    return web.json_response(settings.load())
+    data = await asyncio.to_thread(settings.load)
+    data["profiles"] = settings.catalogue()
+    data["screen"] = settings.screen_of(data["qemu"]["profile"])
+    return web.json_response(data)
 
 
 async def settings_put(request):
@@ -179,7 +187,10 @@ async def settings_put(request):
         data = settings.save(body)
     except OsLabError as exc:
         return web.json_response({"error": str(exc)}, status=400)
-    return web.json_response(data)
+    out = dict(data)
+    out["profiles"] = settings.catalogue()
+    out["screen"] = settings.screen_of(data["qemu"]["profile"])
+    return web.json_response(out)
 
 
 async def run(request):

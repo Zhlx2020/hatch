@@ -1,11 +1,11 @@
 """User-tunable start button and QEMU switches, validated before they are saved.
 
-Everything lives in `workspace/settings.toml`. Extra QEMU arguments go through a
-whitelist because the managed ones (ports, `-S`, `-drive`) would clash if the
-user repeated them.
+QEMU 参数不再让用户拼：一组测过的模板（profile）固定下来，模板之外的再加附加参数。
+模板只覆盖「把机器起对、起稳」这件事，附加参数负责个别实验。
 """
 import os
 
+from .. import config
 from ..core.errors import OsLabError
 from . import workspace
 
@@ -16,29 +16,113 @@ RUN = {
     "action": "run",          # run | build
     "pause_at_entry": True,
 }
+# 模板：id -> 名字、说明、固定参数。参数里的 %s 是镜像路径。
+PROFILES = {
+    "floppy": {
+        "name": "软盘 · VGA 画面",
+        "desc": "默认档：512 字节引导扇区练习，软盘启动，串口留存做断言。",
+        "args": ["-boot", "a", "-m", "32", "-M", "pc",
+                 "-drive", "file=%s,if=floppy,format=raw"],
+        "screen": "vnc",
+    },
+    "disk": {
+        "name": "硬盘 · VGA 画面",
+        "desc": "从 IDE 硬盘启动自己的系统：MBR、分区表、文件系统都在这条路上。",
+        "args": ["-boot", "c", "-m", "64", "-M", "pc",
+                 "-drive", "file=%s,if=ide,format=raw"],
+        "screen": "vnc",
+    },
+    "iso": {
+        "name": "光盘 · VGA 画面",
+        "desc": "当成光盘启动，跑 El Torito 引导或整盘镜像。",
+        "args": ["-boot", "d", "-m", "64", "-M", "pc", "-cdrom", "%s"],
+        "screen": "vnc",
+    },
+    "terminal": {
+        "name": "串口终端（无画面）",
+        "desc": "关掉显卡，串口当控制台：Linux 内核、bootloader 这类只看文本的活用它。",
+        "args": ["-boot", "c", "-m", "128", "-M", "pc", "-vga", "none",
+                 "-drive", "file=%s,if=ide,format=raw"],
+        "screen": "serial",
+    },
+    "smp2": {
+        "name": "双核 · 128MB",
+        "desc": "两核大内存：练 SMP 启动、AP 唤醒、锁和调度。",
+        "args": ["-boot", "a", "-m", "128", "-M", "pc", "-smp", "2",
+                 "-drive", "file=%s,if=floppy,format=raw"],
+        "screen": "vnc",
+    },
+    "q35": {
+        "name": "q35 · 64 位 CPU",
+        "desc": "现代芯片组与长模式：PCIe、AHCI、x86_64 内核走这条。",
+        "args": ["-boot", "c", "-m", "256", "-M", "q35", "-cpu", "qemu64",
+                 "-drive", "file=%s,if=ide,format=raw"],
+        "screen": "vnc",
+    },
+    "net": {
+        "name": "带网卡 · 用户态网络",
+        "desc": "e1000 + user 网络，DHCP 与 TCP 自带；练驱动和协议栈够用。",
+        "args": ["-boot", "a", "-m", "64", "-M", "pc",
+                 "-netdev", "user,id=n0", "-device", "e1000,netdev=n0",
+                 "-drive", "file=%s,if=floppy,format=raw"],
+        "screen": "vnc",
+    },
+    "cold": {
+        "name": "冷调试档",
+        "desc": "禁重启、禁关机：崩了就停在原地，好事后看现场。",
+        "args": ["-boot", "a", "-m", "32", "-M", "pc", "-no-reboot", "-no-shutdown",
+                 "-drive", "file=%s,if=floppy,format=raw"],
+        "screen": "vnc",
+    },
+}
+DEFAULT_PROFILE = "floppy"
 QEMU = {
-    "memory": 32,
-    "machine": "pc",
-    "cpu": "",
+    "profile": DEFAULT_PROFILE,
     "extra": [],
 }
 # 允许放进 extra 的参数：都是独立开关，交给 QEMU 即可
 ALLOWED = {
     "-no-reboot", "-no-shutdown", "-no-fd-bootchk", "-rtc", "-smp",
-    "-accel", "-d", "-D", "-soundhw", "-machine", "-cpu", "-M",
-    "-mem", "-m", "-vga", "-parallel", "-usb", "-usbdevice",
+    "-accel", "-d", "-D", "-soundhw", "-usb", "-usbdevice",
+    "-netdev", "-device", "-nic", "-chardev", "-fsdev", "-virtfs",
 }
 NEEDS_VALUE = {
-    "-rtc", "-smp", "-accel", "-d", "-D", "-soundhw", "-machine", "-cpu",
-    "-M", "-mem", "-m", "-vga", "-parallel", "-usbdevice",
+    "-rtc", "-smp", "-accel", "-d", "-D", "-soundhw", "-usbdevice",
+    "-netdev", "-device", "-nic", "-chardev", "-fsdev", "-virtfs",
 }
-MANAGED = {"-m": "内存", "-boot": "启动顺序", "-display": "显示",
+JOIN = {"-smp", "-rtc", "-usbdevice", "-netdev", "-device", "-nic",
+        "-chardev", "-fsdev", "-virtfs"}
+# 模板已经给过的，用户再写就会撞
+MANAGED = {"-m": "内存", "-boot": "启动顺序", "-display": "显示", "-vga": "显卡",
+           "-M": "机器类型", "-machine": "机器类型", "-cpu": "CPU",
            "-gdb": "调试端口", "-serial": "串口", "-monitor": "监视器",
-           "-S": "入口暂停", "-drive": "镜像"}
+           "-S": "入口暂停", "-drive": "镜像", "-cdrom": "镜像"}
 
 
 def _path(base=None):
     return os.path.join(workspace.root(base), NAME)
+
+
+def catalogue():
+    """界面用的模板清单。"""
+    return [{"id": key, "name": item["name"], "desc": item["desc"],
+             "screen": item["screen"]} for key, item in PROFILES.items()]
+
+
+def profile_args(name, image="%s"):
+    """模板参数，带上显示方式：串口档关画面，其余走本地 VNC。"""
+    item = PROFILES.get(name) or PROFILES[DEFAULT_PROFILE]
+    args = [arg % image if "%s" in arg else arg for arg in item["args"]]
+    if item["screen"] == "vnc":
+        args += ["-display", "vnc=127.0.0.1:%d" % config.VNC_HOST_PORT]
+    else:
+        args += ["-display", "none"]
+    return args
+
+
+def screen_of(name):
+    item = PROFILES.get(name) or PROFILES[DEFAULT_PROFILE]
+    return item["screen"]
 
 
 def load(base=None):
@@ -63,12 +147,8 @@ def load(base=None):
     if isinstance(run.get("pause_at_entry"), bool):
         data["run"]["pause_at_entry"] = run["pause_at_entry"]
     qemu = raw.get("qemu") or {}
-    for key in ("memory", "machine", "cpu"):
-        if key in qemu:
-            try:
-                data["qemu"][key] = _qemu_value(key, qemu[key])
-            except OsLabError:
-                continue
+    if qemu.get("profile") in PROFILES:
+        data["qemu"]["profile"] = qemu["profile"]
     if isinstance(qemu.get("extra"), list):
         try:
             data["qemu"]["extra"] = check_extra(qemu["extra"])
@@ -92,9 +172,10 @@ def save(raw, base=None):
 
     qemu = raw.get("qemu") or {}
     values = dict(current["qemu"])
-    for key in ("memory", "machine", "cpu"):
-        if key in qemu:
-            values[key] = _qemu_value(key, qemu[key])
+    if "profile" in qemu:
+        if qemu["profile"] not in PROFILES:
+            raise OsLabError("没有这个模板：%s" % qemu["profile"])
+        values["profile"] = qemu["profile"]
     if "extra" in qemu:
         values["extra"] = check_extra(qemu["extra"])
 
@@ -114,9 +195,7 @@ def write(data, base=None):
              'action = "%s"' % data["run"]["action"],
              "pause_at_entry = %s" % ("true" if data["run"]["pause_at_entry"] else "false"),
              "", "[qemu]",
-             "memory = %d" % data["qemu"]["memory"],
-             'machine = "%s"' % _esc(data["qemu"]["machine"]),
-             'cpu = "%s"' % _esc(data["qemu"]["cpu"]),
+             'profile = "%s"' % data["qemu"]["profile"],
              "extra = [%s]" % ", ".join('"%s"' % _esc(item)
                                        for item in data["qemu"]["extra"])]
     path = _path(base)
@@ -128,23 +207,6 @@ def _esc(text):
     return str(text).replace("\\", "\\\\").replace('"', '\\"')
 
 
-def _qemu_value(key, value):
-    if key == "memory":
-        try:
-            number = int(value)
-        except (TypeError, ValueError):
-            raise OsLabError("内存要写数字（MB）")
-        if not 4 <= number <= 512:
-            raise OsLabError("内存要在 4 到 512 MB 之间")
-        return number
-    text = str(value or "").strip()
-    if key == "machine" and not text:
-        raise OsLabError("机器类型不能为空")
-    if len(text) > 40:
-        raise OsLabError("%s 太长" % key)
-    return text
-
-
 def check_extra(items):
     """One argument per entry; the flag must be whitelisted."""
     if not isinstance(items, list):
@@ -154,10 +216,10 @@ def check_extra(items):
     for raw in items:
         for part in str(raw).split():
             if part.startswith("-"):
+                if part in MANAGED:
+                    raise OsLabError("%s 已经由模板管理" % part)
                 if part not in ALLOWED:
                     raise OsLabError("不认识的参数：%s" % part)
-                if part in MANAGED:
-                    raise OsLabError("%s 已经由界面管理" % part)
                 if pending:
                     raise OsLabError("%s 缺少取值" % pending)
                 if part in NEEDS_VALUE:
@@ -167,10 +229,8 @@ def check_extra(items):
             else:
                 if not pending:
                     raise OsLabError("多余的取值：%s" % part)
-                out.append("%s=%s" % (pending, part) if pending in
-                           ("-smp", "-rtc", "-vga", "-accel", "-machine",
-                            "-cpu", "-M", "-mem", "-m", "-parallel", "-usbdevice")
-                           else part)
+                out.append("%s=%s" % (pending, part) if pending in JOIN
+                           else "%s %s" % (pending, part))
                 pending = None
     if pending:
         raise OsLabError("%s 缺少取值" % pending)

@@ -205,17 +205,20 @@ async def main():
               and missing.get("reason"), str(missing))
 
         status, conf = await get(session, "/api/settings")
-        check("读到配置", status == 200 and conf["qemu"]["memory"] >= 4, str(conf)[:80])
+        check("读得到模板清单", status == 200 and len(conf.get("profiles") or []) >= 5
+              and conf["qemu"]["profile"], str(conf)[:80])
         status, saved = await put(session, "/api/settings",
-                                  {"qemu": {"memory": 40, "extra": ["-no-reboot"]}})
-        check("配置可保存", status == 200 and saved["qemu"]["memory"] == 40, str(saved)[:80])
+                                  {"qemu": {"profile": "cold", "extra": ["-no-reboot"]}})
+        check("模板可保存", status == 200 and saved["qemu"]["profile"] == "cold", str(saved)[:80])
         status, refused = await put(session, "/api/settings",
                                     {"qemu": {"extra": ["-m", "9"]}})
-        check("托管参数会拒绝", status == 400 and "界面管理" in (refused.get("error") or ""),
+        check("模板占用的参数会拒绝", status == 400 and "模板管理" in (refused.get("error") or ""),
               str(refused))
+        status, denied = await put(session, "/api/settings", {"qemu": {"profile": "nope"}})
+        check("不存在的模板会拒绝", status == 400 and "没有这个模板" in (denied.get("error") or ""))
         status, restored = await put(session, "/api/settings",
-                                     {"qemu": {"memory": 32, "extra": []}})
-        check("配置可还原", status == 200 and restored["qemu"]["memory"] == 32)
+                                     {"qemu": {"profile": "floppy", "extra": []}})
+        check("配置可还原", status == 200 and restored["qemu"]["profile"] == "floppy")
 
         # 清理 ----------------------------------------------------------
         async with session.delete(BASE + "/api/node?path=" + STAMP + "-u.asm") as resp:

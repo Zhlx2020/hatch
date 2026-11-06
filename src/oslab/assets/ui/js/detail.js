@@ -48,8 +48,27 @@ function add(...nodes) {
 
 function commit() {
   if (!stage) return;
+  // 面板每 700 毫秒重绘一次，正在输入的框不能被换掉。
+  const active = document.activeElement;
+  const editing = active && bodyEl.contains(active) && active.tagName === "INPUT"
+    ? active : null;
+  const inputs = [...bodyEl.querySelectorAll("input")];
+  const index = editing ? inputs.indexOf(editing) : -1;
+  const value = editing ? editing.value : "";
+  const start = editing ? editing.selectionStart : 0;
+  const end = editing ? editing.selectionEnd : 0;
   bodyEl.replaceChildren(stage);
   stage = null;
+  if (index < 0) return;
+  const again = bodyEl.querySelectorAll("input")[index];
+  if (!again) return;
+  again.value = value;
+  again.focus();
+  try {
+    again.setSelectionRange(start, end);
+  } catch (_) {
+    /* number 类型不支持选区 */
+  }
 }
 
 const hex = (value, digits) => value.toString(16).padStart(digits, "0");
@@ -408,6 +427,14 @@ export function close() {
 }
 
 export function install() {
+  bodyEl.addEventListener("focusin", (ev) => {
+    const input = ev.target.closest("input");
+    if (input) input.dataset.editing = "1";
+  });
+  bodyEl.addEventListener("focusout", (ev) => {
+    const input = ev.target.closest("input");
+    if (input) delete input.dataset.editing;
+  });
   tabsEl.addEventListener("click", (ev) => {
     const target = ev.target.closest("button[data-tab]");
     if (target) open(target.dataset.tab);

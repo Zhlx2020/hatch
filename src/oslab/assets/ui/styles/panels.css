@@ -134,3 +134,18 @@ pre {
 #mem .byte { color: var(--text); }
 #mem .byte.zero { color: #39424d; }
 #mem .asis { color: #55606c; flex: 1; min-width: 0; overflow: hidden; }
+
+/* 串口模板没有画面，就把屏幕那块让给串口文本 */
+#serial-view {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 10px 12px;
+  overflow: hidden;
+  font: 13px/1.35 Consolas, "Courier New", monospace;
+  color: #9fe6a0;
+  background: #06090a;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+body.serial-mode #screen { visibility: hidden; }
