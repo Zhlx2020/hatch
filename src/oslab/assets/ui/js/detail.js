@@ -36,6 +36,21 @@ let syntax = "intel";
 let disAddr = 0;
 let timer = null;
 let shown = false;
+let stage = null;
+
+function begin() {
+  stage = document.createElement("div");
+}
+
+function add(...nodes) {
+  stage.append(...nodes);
+}
+
+function commit() {
+  if (!stage) return;
+  bodyEl.replaceChildren(stage);
+  stage = null;
+}
 
 const hex = (value, digits) => value.toString(16).padStart(digits, "0");
 const num = (value) => (typeof value === "number"
@@ -95,7 +110,7 @@ function compose(full, part, mode) {
 }
 
 function renderRegs(data) {
-  bodyEl.textContent = "";
+  begin();
   const regs = data.regs || {};
 
   const modes = [
@@ -113,7 +128,7 @@ function renderRegs(data) {
     });
     bar.append(button);
   }
-  bodyEl.append(bar);
+  add(bar);
 
   const names = NAMES[width];
   names.forEach((name, index) => {
@@ -143,7 +158,7 @@ function renderRegs(data) {
     if (width !== "bits") {
       row.addEventListener("dblclick", () => editInline(row, name, full, value, width));
     }
-    bodyEl.append(row);
+    add(row);
   });
 
   const flags = document.createElement("div");
@@ -157,7 +172,7 @@ function renderRegs(data) {
     b.addEventListener("click", () => write("eflags", (regs.eflags || 0) ^ (1 << bit)));
     flags.append(b);
   }
-  bodyEl.append(flags);
+  add(flags);
 
   const segs = document.createElement("div");
   segs.className = "reg";
@@ -165,11 +180,12 @@ function renderRegs(data) {
   for (const name of SEGS) {
     segs.append(cell(name + ":" + hex(regs[name] || 0, 4), "value"));
   }
-  bodyEl.append(segs);
+  add(segs);
 
   note(width === "bits"
     ? "点方框翻转该位。"
     : "双击数值可写回；宽度只影响看到与写到的位置。");
+  commit();
 }
 
 function editInline(row, name, full, value, mode) {
@@ -203,7 +219,7 @@ async function write(name, value) {
 
 // memory --------------------------------------------------------------
 async function renderMem() {
-  bodyEl.textContent = "";
+  begin();
   const snap = await api.state();
   const regs = (await api.regs()).regs || {};
   const follow = (name) => () => {
@@ -231,11 +247,14 @@ async function renderMem() {
   next.textContent = "下页 ▶";
   next.addEventListener("click", () => step(256));
   wrap.append(prev, next);
-  bodyEl.append(wrap);
+  add(wrap);
 
   if (!memAddr) memAddr = num(regs.eip);
   const data = await api.mem(hex(memAddr, 8), 256);
-  if (data.error) return note(data.error);
+  if (data.error) {
+    note(data.error);
+    return commit();
+  }
   memAddr = parseInt(data.addr, 16);
 
   for (const row of data.rows || []) {
@@ -256,14 +275,15 @@ async function renderMem() {
       line.append(b);
     }
     line.append(cell(row.text, "text"));
-    bodyEl.append(line);
+    add(line);
   }
   note("单击字节把地址挪到它；" + (snap.state === "running" ? "运行中数据可能变化。" : "已暂停。"));
+  commit();
 }
 
 // disassembly ---------------------------------------------------------
 async function renderDisasm() {
-  bodyEl.textContent = "";
+  begin();
   const regs = (await api.regs()).regs || {};
   const eip = num(regs.eip);
   const { wrap } = jumpBox(disAddr || eip, (next) => {
@@ -310,10 +330,13 @@ async function renderDisasm() {
     close();
   });
   wrap.append(follow, prev, next, runTo);
-  bodyEl.append(wrap);
+  add(wrap);
 
   const data = await api.disasm(hex(disAddr || eip, 8), 48, syntax);
-  if (data.error) return note(data.error);
+  if (data.error) {
+    note(data.error);
+    return commit();
+  }
   disAddr = parseInt(data.addr, 16);
 
   const marks = await api.breakpoints();
@@ -335,18 +358,19 @@ async function renderDisasm() {
       disAddr = parseInt(row.addr, 16);
       renderDisasm();
     });
-    bodyEl.append(line);
+    add(line);
   }
   note(syntax === "intel"
     ? "点圆点断点；双击行把地址挪到该处。"
     : "AT&T 顺序是源,目的，寄存器带 %、立即数带 $。");
+  commit();
 }
 
 function note(text) {
   const p = document.createElement("p");
   p.className = "dim";
   p.textContent = text;
-  bodyEl.append(p);
+  (stage || bodyEl).append(p);
 }
 
 // shell ---------------------------------------------------------------

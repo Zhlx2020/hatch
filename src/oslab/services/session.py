@@ -3,6 +3,7 @@ import os
 import re
 import socket
 import threading
+import time
 import traceback
 import time
 
@@ -38,6 +39,8 @@ class Session:
         self.source_map = {}
         self.want_run = False
         self.cache = {}
+        self.stale = 0.0
+        self.filling = False
 
     # lifecycle ------------------------------------------------------
     def prepare(self):
@@ -210,13 +213,25 @@ class Session:
         if self.arbiter.state in (state.RUNNING, state.BOOTING):
             text, cursor = self.serial.since(self.cursor) if self.serial else ("", 0)
             self.cursor = cursor
-            return dict(self.cache, state=self.arbiter.state, file=self.file,
+            data = dict(self.cache, state=self.arbiter.state, file=self.file,
                         serial=text, error=self.last_error)
+            if self.arbiter.state == state.BOOTING:
+                # 启动过程里也要看得见机器：此时客户机停在复位点，读一下无害。
+                data.update(self._snapshot())
+            elif time.monotonic() - self.stale > 1.5 and not self.filling:
+                # 运行中低频补读一次，面板不至于一直是空的
+                self.filling = True
+                try:
+                    data.update(self._snapshot())
+                finally:
+                    self.filling = False
+            return data
         return self._snapshot()
 
     def _snapshot(self):
         data = dict(self.cache)
-        data.pop("state", None)
+        for key in ("state", "error"):
+            data.pop(key, None)
         try:
             eip = self.eip()
             data["eip"] = "%08x" % eip
@@ -229,11 +244,13 @@ class Session:
             data["error"] = "读取超时：%s" % exc
         data["state"] = self.arbiter.state
         data["file"] = self.file
-        if self.last_error and "error" not in data:
+        if self.last_error:                # 真正的失败原因优先于偶发读超时
             data["error"] = self.last_error
+        self.stale = time.monotonic()
         data["bps"] = self.breakpoints()
         data["serial"] = self.serial.since(self.cursor)[0] if self.serial else ""
-        self.cache = {k: v for k, v in data.items() if k not in ("serial", "state")}
+        self.cache = {k: v for k, v in data.items()
+                      if k not in ("serial", "state", "error")}
         return data
 
     def eip(self):

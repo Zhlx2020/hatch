@@ -32,19 +32,24 @@ header .title { color: var(--dim); letter-spacing: .12em; margin-right: auto; }
   overflow: hidden;
   cursor: pointer;
 }
-#tree .row .icon {
-  width: 14px;
+#tree .row .chev,
+#tree .row .ficon {
   flex: none;
-  text-align: center;
-  font-size: 11px;
+  display: flex;
+  align-items: center;
   color: var(--dim);
 }
+#tree .row .chev { width: 12px; justify-content: center; }
+#tree .row .chev:empty { width: 12px; }
 #tree .row .label { overflow: hidden; text-overflow: ellipsis; }
 #tree .row:hover { background: color-mix(in srgb, var(--edge) 40%, transparent); }
 #tree .row.active { border-color: var(--accent); color: var(--accent); }
-#tree .row.dir .icon { color: var(--dir); }
+#tree .row.dir .ficon { color: var(--dir); }
+#tree .row.dir .chev { color: #46515e; }
 #tree .row.dir .label { color: var(--dir); font-weight: 600; letter-spacing: .02em; }
-#tree .row.file .icon { color: var(--dim); }
+#tree .row.file .ficon { color: #6a7683; }
+#tree .row.file.asm .ficon { color: #8b98a6; }
+#tree .row:hover .chev { color: var(--dim); }
 #tree .row.file .label { color: var(--text); }
 
 #tree .row.file .ext { color: var(--dim); font-size: 11px; letter-spacing: .04em; }
@@ -113,3 +118,20 @@ aside {
   color: var(--danger);
   font: inherit;
 }
+
+@media (max-width: 1120px) {
+  body {
+    grid-template-columns: 210px minmax(0, 1fr);
+    grid-template-rows: 42px minmax(0, 1fr) 40vh;
+  }
+  #files { grid-area: 2 / 1; }
+  #editor { grid-area: 2 / 2; }
+  aside {
+    grid-area: 3 / 1 / 4 / 3;
+    flex-direction: row;
+    border-top: 1px solid var(--edge);
+  }
+  #screenwrap { flex: 1 1 auto; min-width: 0; }
+  #panels { flex: 0 0 46%; min-width: 300px; }
+}
+

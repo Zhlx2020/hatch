@@ -11,6 +11,9 @@
   --screen-h: 478px;
 }
 
+*::-webkit-scrollbar { width: 0; height: 0; }
+* { scrollbar-width: none; }
+
 * { box-sizing: border-box; }
 
 html, body {
@@ -44,6 +47,7 @@ button:disabled { opacity: .45; cursor: default; }
   min-height: 0;
 }
 .pane > h2 {
+  flex: none;
   margin: 0;
   padding: 5px 9px;
   font-size: 11px;
@@ -60,7 +64,9 @@ button.mini {
   font-size: 11px;
   line-height: 15px;
 }
-.pane > h2 { display: flex; align-items: center; gap: 4px; }
+.pane > h2 { display: flex; align-items: center; gap: 6px; }
+.pane > h2 .tag { color: var(--edge); }
+.pane > h2 .tag:not(:empty) { color: var(--dim); }
 .pane > h2 button.mini { margin-left: 0; }
-#regs { flex: 1; }
+#regs { flex: none; }
 .sub { border-top: 1px solid var(--edge); color: var(--accent); max-height: 35%; }

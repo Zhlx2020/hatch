@@ -69,3 +69,68 @@ pre {
   animation: spin 900ms linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* 小面板：结构化显示 ------------------------------------------------ */
+#panels .body { padding: 6px 8px; font: 12px/1.7 ui-monospace, Consolas, monospace; }
+#panels .empty { color: var(--dim); }
+
+#regs.rgrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px 10px;
+}
+#regs .rcell {
+  display: flex;
+  gap: 6px;
+  padding: 0 4px;
+  border-left: 2px solid transparent;
+  white-space: nowrap;
+  overflow: hidden;
+}
+#regs .rcell.here { border-left-color: var(--accent); background: #5fbf921a; }
+#regs .rn { color: var(--dim); width: 30px; flex: none; }
+#regs .rv { color: var(--text); font-variant-numeric: tabular-nums; }
+#regs .rv.zero { color: #4d5763; }
+#regs .rflags { display: flex; gap: 3px; margin-top: 5px; grid-column: 1 / -1; }
+#regs .fl {
+  padding: 0 4px;
+  border: 1px solid var(--edge);
+  border-radius: 2px;
+  font-size: 10px;
+  color: #4d5763;
+}
+#regs .fl.on { color: #0b0d10; background: var(--accent); border-color: var(--accent); }
+#regs .fl.raw { border: 0; color: var(--dim); }
+#regs .rsegs { display: flex; gap: 8px; margin-top: 4px; color: #55606c; font-size: 11px; }
+
+#bps { display: flex; flex-wrap: wrap; gap: 4px; padding: 6px 8px 0; font-size: 11px; }
+#bps .bp { padding: 0 4px; border: 1px solid var(--danger); border-radius: 2px; color: var(--danger); }
+
+#disasm .drow {
+  display: flex;
+  gap: 8px;
+  padding: 0 4px;
+  border-left: 2px solid transparent;
+  white-space: pre;
+  overflow: hidden;
+}
+#disasm .drow.here { border-left-color: var(--accent); background: #5fbf921a; }
+#disasm .dot {
+  width: 8px;
+  height: 8px;
+  margin-top: 6px;
+  flex: none;
+  border-radius: 50%;
+  border: 1px solid var(--edge);
+}
+#disasm .dot.on { background: var(--danger); border-color: var(--danger); }
+#disasm .addr { color: #55606c; }
+#disasm .bytes { color: #3f4954; width: 104px; flex: none; overflow: hidden; }
+#disasm .op { color: var(--text); min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; }
+
+#mem .mrow { display: flex; gap: 10px; white-space: pre; overflow: hidden; }
+#mem .addr { color: #55606c; }
+#mem .hex { display: flex; gap: 3px; flex: none; }
+#mem .byte { color: var(--text); }
+#mem .byte.zero { color: #39424d; }
+#mem .asis { color: #55606c; flex: 1; min-width: 0; overflow: hidden; }
