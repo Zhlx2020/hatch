@@ -1,10 +1,12 @@
 import * as api from "./api.js";
+import * as dialog from "./dialog.js";
 
 const treeEl = document.getElementById("tree");
 const menuEl = document.getElementById("tree-menu");
 
 let active = "";
 let onOpen = () => {};
+let nodes = [];
 const collapsed = new Set();
 
 const SVG = '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" '
@@ -47,9 +49,38 @@ export function setActive(path) {
 }
 
 async function reload() {
-  const nodes = await api.tree();
+  nodes = (await api.tree()) || [];
   treeEl.textContent = "";
-  render(treeEl, nodes || [], 0);
+  render(treeEl, nodes, 0);
+}
+
+// 找某个目录下的同级名字，输入框拿它挡重名
+function siblingsOf(dir) {
+  const names = [];
+  const walk = (list, parent) => {
+    for (const node of list) {
+      if (parent === dir) names.push(node.name);
+      if (node.children) walk(node.children, node.path);
+    }
+  };
+  walk(nodes, "");
+  return names;
+}
+
+function nodeAt(path) {
+  const walk = (list) => {
+    for (const node of list) {
+      if (node.path === path) return node;
+      const hit = node.children && walk(node.children);
+      if (hit) return hit;
+    }
+    return null;
+  };
+  return walk(nodes);
+}
+
+function countAll(node) {
+  return (node.children || []).reduce((sum, child) => sum + 1 + countAll(child), 0);
 }
 
 function render(parent, nodes, depth) {
@@ -131,11 +162,18 @@ function showMenu(ev, node) {
     ["新建文件", () => promptCreate(dir, "file")],
     ["新建目录", () => promptCreate(dir, "dir")],
     ["重命名", () => promptRename(node)],
+    ["-", null],
     ["删除", () => drop(node)],
   ];
-  for (const [label, action] of items) {
+  for (const [text, action] of items) {
+    if (!action) {
+      const rule = document.createElement("hr");
+      menuEl.append(rule);
+      continue;
+    }
     const button = document.createElement("button");
-    button.textContent = label;
+    button.textContent = text;
+    if (text === "删除") button.classList.add("danger");
     button.addEventListener("click", () => {
       hideMenu();
       action();
@@ -152,31 +190,93 @@ function hideMenu() {
 }
 
 async function promptCreate(dir, kind) {
-  const base = kind === "dir" ? "newdir" : "new.asm";
-  const suggested = (dir ? dir + "/" : "") + base;
-  const path = window.prompt(kind === "dir" ? "目录路径" : "文件路径", suggested);
-  if (!path) return;
-  const out = await api.createNode(path.replace(/\/+$/, ""), kind);
-  if (out.error) return say(out.error);
+  const isDir = kind === "dir";
+  const base = isDir ? "newdir" : "new.asm";
+  const taken = new Set(siblingsOf(dir));
+  const out = await dialog.open({
+    title: isDir ? "新建目录" : "新建文件",
+    sub: "位置　" + (dir || "根目录"),
+    tone: isDir ? "dir" : "file",
+    confirm: "创建",
+    fields: [{
+      name: "path",
+      label: "路径",
+      value: (dir ? dir + "/" : "") + base,
+      placeholder: isDir ? "目录名" : "文件名",
+      suffix: isDir ? "目录" : "纯文本",
+      check: (value) => dialog.nameProblem(value, { allowSlash: true, taken }),
+    }],
+    note: isDir
+      ? "带上 <span class=\"mono\">/</span> 可以一次建出多层目录。"
+      : "扩展名决定按什么语言高亮；带 <span class=\"mono\">/</span> 会一起建出子目录。",
+    oninput: (value, sheet, field) => {
+      if (field !== "path") return;
+      if (isDir) return;
+      const tail = sheet.querySelector(".suffix");
+      if (tail) tail.textContent = dialog.fileIcon(value.trim()) || "纯文本";
+    },
+    onsubmit: (data) => api.createNode(data.path.replace(/\/+$/, ""), kind),
+  });
+  if (!out) return;
+  const path = out.path.replace(/\/+$/, "");
   await reload();
-  if (kind === "file") await open(path);
+  if (!isDir) await open(path);
 }
 
 async function promptRename(node) {
-  const name = window.prompt("新名字", node.name);
-  if (!name || name === node.name) return;
-  const out = await api.renameNode(node.path, name);
-  if (out.error) return say(out.error);
+  const dot = node.name.lastIndexOf(".");
+  const stem = dot > 0 ? node.name.slice(0, dot) : node.name;
+  const ext = dot > 0 ? node.name.slice(dot) : "";
+  const parent = node.path.split("/").slice(0, -1).join("/");
+  const taken = new Set(siblingsOf(parent));
+  taken.delete(node.name);
+  const out = await dialog.open({
+    title: "重命名",
+    sub: node.path,
+    tone: node.kind === "dir" ? "dir" : "file",
+    confirm: "改名",
+    fields: node.kind === "dir"
+      ? [{ name: "stem", label: "新名字", value: stem, check: (v) => dialog.nameProblem(v, { taken }) }]
+      : [{ name: "stem", label: "新名字", value: stem,
+          check: (v) => dialog.nameProblem(v + ext, { taken }) },
+        { name: "ext", label: "后缀", value: ext, suffix: "可留空",
+          check: (v) => (/^\.?[\w.+-]{0,12}$/.test(v) ? "" : "后缀只能是字母数字 . _ + -") }],
+    note: "只改大小写也算改名；<b>路径会跟着变</b>，断点位置会保留。",
+    onsubmit: async (data) => {
+      const name = node.kind === "dir" ? data.stem : data.stem + data.ext;
+      if (name === node.name) return { path: node.path };
+      return api.renameNode(node.path, name);
+    },
+  });
+  if (!out) return;
   await reload();
-  setActive(out.path);
+  setActive(out.path || node.path);
 }
 
 async function drop(node) {
-  if (!window.confirm("删除 " + node.path + " ？")) return;
-  const out = await api.deleteNode(node.path);
-  if (out.error) return say(out.error);
+  const kids = countAll(node);
+  const out = await dialog.open({
+    title: node.kind === "dir" ? "删除目录" : "删除文件",
+    sub: node.path,
+    tone: "danger",
+    confirm: "删除",
+    note: node.kind === "dir" && kids
+      ? "整个目录连同 <b>其中 " + kids + " 项</b>一起删掉，删完不能撤销。"
+      : "内容不保留，<b>删完不能撤销</b>。",
+    onsubmit: () => api.deleteNode(node.path),
+  });
+  if (!out) return;
   if (node.path === active) active = "";
   await reload();
+}
+
+// 给工具栏的「－」用：删掉当前选中的那个
+export function removeSelected() {
+  return drop(nodeAt(active) || { kind: "file", path: active, name: active });
+}
+
+export function createIn(dir, kind) {
+  return promptCreate(dir, kind);
 }
 
 export async function open(path) {

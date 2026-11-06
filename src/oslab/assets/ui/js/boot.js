@@ -1,4 +1,5 @@
 import * as api from "./api.js";
+import * as dialog from "./dialog.js";
 import * as detail from "./detail.js";
 import * as editor from "./editor.js";
 import * as settings from "./settings.js";
@@ -111,15 +112,12 @@ document.getElementById("pause").addEventListener("click", () => guarded(api.pau
 document.getElementById("cont").addEventListener("click", () => guarded(api.cont));
 document.getElementById("reset").addEventListener("click", () => guarded(api.reset));
 document.getElementById("new-file").addEventListener("click", showTemplates);
-document.getElementById("new-dir").addEventListener("click", async () => {
-  const path = window.prompt("新目录路径", "src");
-  if (!path) return;
-  const out = await api.createNode(path, "dir");
-  if (out.error) say(out.error, true);
-  await tree.refresh();
-});
+document.getElementById("new-dir").addEventListener("click", () => tree.createIn("", "dir"));
 document.getElementById("del-file").addEventListener("click", async () => {
-  await editor.remove();
+  const path = tree.selected();
+  if (!path) return say("先选一个文件", true);
+  await tree.removeSelected();
+  if (!tree.selected()) await editor.close();
   await tree.refresh();
 });
 
@@ -149,10 +147,20 @@ async function showTemplates() {
 }
 
 async function useTemplate(name) {
-  const dir = window.prompt("放到哪个目录", name);
-  if (!dir) return;
-  const out = await api.applyTemplate(name, dir.replace(/\/+$/, ""));
-  if (out.error) return say(out.error, true);
+  const out = await dialog.open({
+    title: "从模板新建",
+    sub: "模板　" + name,
+    confirm: "创建",
+    fields: [{
+      name: "dir",
+      label: "放到哪个目录",
+      value: name,
+      check: (v) => dialog.nameProblem(v.replace(/\/+$/, ""), { allowSlash: true }),
+    }],
+    note: "模板会写成一整个工程目录，目录要是不存在会建出来。",
+    onsubmit: (data) => api.applyTemplate(name, data.dir.replace(/\/+$/, "")),
+  });
+  if (!out) return;
   tplBox.classList.remove("open");
   await tree.refresh();
   if (out.entry) await tree.open(out.entry);

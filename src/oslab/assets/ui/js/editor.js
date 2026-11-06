@@ -58,8 +58,7 @@ function showProblems(list) {
 
 const C_FILES = /\.(c|h)$/i;
 
-export function show(path, text) {
-  if (path !== current) pending = new Map();
+export function show(path, text) {  if (path !== current) pending = new Map();
   current = path;
   view.setLanguage(C_FILES.test(path || "") ? "c" : "asm");
   dead = !text && !path;
@@ -67,6 +66,10 @@ export function show(path, text) {
   view.setDiagnostics([]);
   showProblems([]);
   titleEl.textContent = path || "—";
+}
+
+export function close() {
+  show("", "");
 }
 
 export async function open(path) {
