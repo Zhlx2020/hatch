@@ -66,11 +66,15 @@ function token(stream) {
 
 const nasm = StreamLanguage.define({ name: "nasm", token });
 
-// C：注释、字符串、字符、预处理、数字、关键字/类型分开上色
+// C：注释、字符串、字符、预处理、数字、关键字/类型分开上色。
+// 预处理要拆开看：指令本身一种颜色，被包含的头文件名另一种；
+// 函数名单独一类，不然满屏都是变量色，看不出哪儿在调用。
 const C_NUMBER = /^(?:0[xX][0-9a-fA-F]+|\d+\.?\d*(?:[eE][-+]?\d+)?)[uUlLfF]*/;
 const C_WORD = /^[A-Za-z_]\w*/;
+const C_DIRECTIVE = /^\s*#\s*([A-Za-z_]+)/;
+const C_HEADER = /^(?:<[^>\n]*>|"[^"\n]*")/;
 
-function cToken(stream) {
+function cToken(stream, state) {
   if (stream.eatSpace()) return null;
   if (stream.match("//")) {
     stream.skipToEnd();
@@ -83,16 +87,27 @@ function cToken(stream) {
     }
     return "comment";
   }
+  if (state.inHeader) {
+    state.inHeader = false;
+    if (stream.match(C_HEADER)) return "string.special";
+  }
   if (stream.match(/^"(?:[^"\\]|\\.)*"?/)) return "string";
   if (stream.match(/^'(?:[^'\\]|\\.)*'?/)) return "string";
-  if (stream.sol() && stream.match(/^\s*#[A-Za-z]+/)) return "meta";
+  // 缩进过的 #define 也算指令：看行首到现在是不是只剩空白
+  const atLineStart = /^\s*$/.test(stream.string.slice(0, stream.start));
+  const directive = atLineStart && stream.match(C_DIRECTIVE);
+  if (directive) {
+    state.inHeader = /include/.test(directive[1]);
+    return "meta";
+  }
   if (stream.match(C_NUMBER)) return "number";
   const word = stream.match(C_WORD);
   if (word) {
     const text = word[0];
     if (KEYWORDS.includes(text)) return "keyword";
+    if (stream.match(/^\s*\(/, false)) return "variableName.function";
     if (TYPES.includes(text)) return "typeName";
-    if (LIBRARY.includes(text)) return "typeName";
+    if (LIBRARY.includes(text)) return "variableName.function";
     return "variableName";
   }
   if (stream.match(/^[{}()\[\];,.+\-*/%&|^~!<>=?:]+/)) return "operator";
@@ -100,7 +115,11 @@ function cToken(stream) {
   return null;
 }
 
-const clike = StreamLanguage.define({ name: "c", token: cToken });
+const clike = StreamLanguage.define({
+  name: "c",
+  startState: () => ({ inHeader: false }),
+  token: cToken,
+});
 
 const theme = EditorView.theme(
   {
@@ -134,6 +153,10 @@ const theme = EditorView.theme(
 const highlight = syntaxHighlighting(
   HighlightStyle.define([
     { tag: tags.labelName, color: "#d8b573" },
+    { tag: tags.meta, color: "#c98fd6" },
+    { tag: tags.special(tags.string), color: "#d9a06f" },
+    { tag: [tags.function(tags.variableName), tags.function(tags.propertyName)],
+      color: "#7fc5e0" },
     { tag: tags.keyword, color: "#c98fd6" },
     { tag: tags.typeName, color: "#6fb2d2" },
     { tag: tags.number, color: "#8fc98f" },
