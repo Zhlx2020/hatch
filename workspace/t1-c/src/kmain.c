@@ -7,6 +7,7 @@ void _start(void)
     screen_clear();
     screen_write("C kernel up, Esc to quit\n\n", 0x0A);
     screen_write("Breakpoints: click a line number in the editor.\n", 0x07);
+    
 
     for (;;)
     {

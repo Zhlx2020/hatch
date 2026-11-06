@@ -1,0 +1,8 @@
+kind = "asm"
+entry = "boot.asm"
+base = 0x7C00
+
+[run]
+label = "运行"
+hint = "点行号打红点，然后运行"
+pause_at_entry = true
