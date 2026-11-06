@@ -182,6 +182,24 @@ class Session:
         return self.serial.tail() if self.serial else ""
 
     # observation ----------------------------------------------------
+    def reg_detail(self):
+        backend = self._need_backend()
+        return {"regs": backend.reg_map(), "eip": "%08x" % backend.eip(),
+                "state": self.arbiter.state}
+
+    def set_reg(self, name, value):
+        backend = self._need_backend()
+        backend.set_reg(name, value)
+        return "%08x" % backend._reg_value(name)
+
+    def mem_rows(self, addr, count=256):
+        rows = self._need_backend().mem_rows(addr & 0xFFFFFFF0, min(int(count), 1024))
+        return {"addr": "%08x" % addr, "rows": rows}
+
+    def disasm_rows(self, addr, count=32):
+        rows = self._need_backend().disasm_rows(addr, min(int(count), 256))
+        return {"addr": "%08x" % addr, "rows": rows, "eip": "%08x" % self.eip()}
+
     def snapshot(self):
         if not self.backend or not self.backend.alive:
             return {"state": self.arbiter.state, "error": self.last_error, "file": self.file}

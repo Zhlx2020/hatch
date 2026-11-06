@@ -45,3 +45,27 @@ def around(lines, addr, count=8):
         if int(line[:8], 16) >= addr:
             return "\n".join(lines[index:index + count])
     return "\n".join(lines[-count:])
+
+
+def rows(lines, addr, count=16):
+    if not lines:
+        return []
+    start = 0
+    for index, line in enumerate(lines):
+        if int(line[:8], 16) >= addr:
+            start = index
+            break
+    else:
+        start = max(0, len(lines) - count)
+    out = []
+    for line in lines[start:start + count]:
+        address, rest = line.split(":", 1)
+        text = rest.strip()
+        if "  " in text:
+            bytes_, mnemonic = text.split("  ", 1)
+        else:
+            bytes_, mnemonic = "", text
+        out.append({"addr": address, "bytes": bytes_.strip(),
+                    "text": mnemonic.strip()})
+    return out
+

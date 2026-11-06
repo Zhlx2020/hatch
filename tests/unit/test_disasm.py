@@ -35,3 +35,21 @@ def test_around_past_end_returns_tail(tmp_path):
     lines = disasm.load(str(image))
     text = disasm.around(lines, 0xFFFF, 4)
     assert "jmp" in text
+
+
+def test_rows_split_bytes_and_text(tmp_path):
+    image = tmp_path / "boot.img"
+    payload = bytearray(512)
+    payload[: len(CODE)] = CODE
+    image.write_bytes(bytes(payload))
+    disasm.build(str(image), 0x7C00)
+
+    rows = disasm.rows(disasm.load(str(image)), 0x7C00, 4)
+    assert rows[0]["addr"] == "00007c00"
+    assert rows[0]["bytes"] == "fa"
+    assert rows[0]["text"] == "cli"
+    assert all(row["text"] and not row["text"].startswith(" ") for row in rows)
+
+
+def test_rows_without_map_is_empty():
+    assert disasm.rows([], 0x7C00, 4) == []

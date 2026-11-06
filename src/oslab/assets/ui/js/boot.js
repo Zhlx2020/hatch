@@ -1,4 +1,5 @@
 import * as api from "./api.js";
+import * as detail from "./detail.js";
 import * as editor from "./editor.js";
 import * as input from "./input.js";
 import * as panels from "./panels.js";
@@ -47,6 +48,13 @@ async function boot() {
 }
 
 document.getElementById("run").addEventListener("click", boot);
+for (const button of document.querySelectorAll("[data-open]")) {
+  button.addEventListener("click", () => detail.open(button.dataset.open));
+}
+for (const box of ["regs", "mem", "disasm"]) {
+  document.getElementById(box).addEventListener("dblclick", () => detail.open(
+    box === "disasm" ? "dis" : box));
+}
 document.getElementById("step").addEventListener("click", () => guarded(api.step));
 document.getElementById("step-over").addEventListener("click", () => guarded(api.stepOver));
 document.getElementById("pause").addEventListener("click", () => guarded(api.pause));
@@ -66,6 +74,7 @@ document.getElementById("del-file").addEventListener("click", async () => {
 });
 
 editor.install();
+detail.install();
 input.install();
 screen.connect();
 panels.loadSerial();

@@ -21,7 +21,10 @@ ROUTES = [
     ("POST", "/api/bp", handlers.bp_add),
     ("DELETE", "/api/bp/{addr}", handlers.bp_del),
     ("GET", "/api/bps", handlers.bp_list),
+    ("GET", "/api/regs", handlers.regs),
+    ("POST", "/api/reg", handlers.reg_set),
     ("POST", "/api/mem", handlers.mem),
+    ("POST", "/api/disasm", handlers.disasm),
     ("POST", "/api/tables", handlers.tables),
     ("GET", "/ws/screen", handlers.screen),
 ]
