@@ -20,7 +20,7 @@ def test_writes_bootable_image(workdir):
     assert len(data) == 1474560
     assert data[510:512] == b"\x55\xaa"
     assert data[:2] == b"\xb8\x34"          # mov ax, 0x1234
-    assert (workdir / "boot.img.dis").exists()
+    assert (workdir / "boot.img.dis.intel").exists()
 
 
 def test_missing_signature_is_rejected(workdir):

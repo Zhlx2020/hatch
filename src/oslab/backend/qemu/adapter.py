@@ -20,12 +20,14 @@ class QemuBackend:
         self._image = image
         self._rsp = None
         self._lines = []
+        self._att = []
 
     # lifecycle ------------------------------------------------------
     def start(self):
         self._proc.start()
         self._rsp = Rsp(config.HOST, config.GDB_PORT)
-        self._lines = disasm.load(self._image)
+        self._lines = disasm.load(self._image, "intel")
+        self._att = disasm.load(self._image, "att")
         self._rsp.stop_reason()
 
     def stop(self):
@@ -113,8 +115,8 @@ class QemuBackend:
     def read_mem(self, addr, count):
         return self._need().read_mem(addr, count)
 
-    def disassemble(self, addr, count=8):
-        return disasm.around(self._lines, addr, count)
+    def disassemble(self, addr, count=8, syntax="intel"):
+        return disasm.around(self._pick(syntax), addr, count)
 
     def mem_rows(self, addr, count):
         data = self.read_mem(addr, count)
@@ -128,8 +130,11 @@ class QemuBackend:
             })
         return rows
 
-    def disasm_rows(self, addr, count):
-        return disasm.rows(self._lines, addr, count)
+    def disasm_rows(self, addr, count, syntax="intel"):
+        return disasm.rows(self._pick(syntax), addr, count)
+
+    def _pick(self, syntax):
+        return self._att if syntax == "att" else self._lines
 
     def hexdump(self, addr, count):
         try:

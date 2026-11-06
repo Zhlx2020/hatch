@@ -116,3 +116,5 @@
 .pane > h2 .more { margin-left: auto; }
 
 #detail-body button.accent { border-color: var(--accent); color: var(--accent); }
+
+#detail-body .detail-bar button.on { border-color: var(--accent); color: var(--accent); }

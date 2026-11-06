@@ -32,6 +32,7 @@ const DIGITS = { dword: 8, word: 4, hi: 2, lo: 2 };
 let width = "dword";
 let tab = "regs";
 let memAddr = 0;
+let syntax = "intel";
 let disAddr = 0;
 let timer = null;
 let shown = false;
@@ -285,6 +286,20 @@ async function renderDisasm() {
   const next = document.createElement("button");
   next.textContent = "下 ▶";
   next.addEventListener("click", () => step(16 * 5));
+  const bar = document.createElement("div");
+  bar.className = "detail-bar";
+  for (const [key, label] of [["intel", "Intel"], ["att", "AT&T"]]) {
+    const button = document.createElement("button");
+    button.textContent = label;
+    button.className = key === syntax ? "on" : "";
+    button.addEventListener("click", () => {
+      syntax = key;
+      renderDisasm();
+    });
+    bar.append(button);
+  }
+  wrap.append(bar);
+
   const runTo = document.createElement("button");
   runTo.textContent = "运行到此处";
   runTo.className = "accent";
@@ -297,7 +312,7 @@ async function renderDisasm() {
   wrap.append(follow, prev, next, runTo);
   bodyEl.append(wrap);
 
-  const data = await api.disasm(hex(disAddr || eip, 8), 48);
+  const data = await api.disasm(hex(disAddr || eip, 8), 48, syntax);
   if (data.error) return note(data.error);
   disAddr = parseInt(data.addr, 16);
 
@@ -322,7 +337,9 @@ async function renderDisasm() {
     });
     bodyEl.append(line);
   }
-  note("点圆点断点；双击行把地址挪到该处。");
+  note(syntax === "intel"
+    ? "点圆点断点；双击行把地址挪到该处。"
+    : "AT&T 顺序是源,目的，寄存器带 %、立即数带 $。");
 }
 
 function note(text) {

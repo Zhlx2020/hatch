@@ -130,6 +130,15 @@ async def main():
         status, dis = await post(session, "/api/disasm", {"addr": "7c00", "count": 8})
         check("反汇编按地址取", status == 200 and dis.get("rows")
               and dis["rows"][0]["text"] != "", str(dis)[:60])
+        intel_text = " ".join(row["text"] for row in (dis.get("rows") or []))
+        check("反汇编默认 intel", "%" not in intel_text, intel_text[:60])
+
+        status, dis = await post(session, "/api/disasm",
+                                 {"addr": "7c00", "count": 8, "syntax": "att"})
+        att_text = " ".join(row["text"] for row in (dis.get("rows") or []))
+        check("反汇编可切 att", status == 200 and "$" in att_text, att_text[:60])
+        check("十六位反汇编不错位", "<.data>" not in att_text and "(bad)" not in intel_text,
+              att_text[:60])
 
         status, lint = await post(session, "/api/check",
                                  {"path": "x.asm", "text": "bits 16\norg 0x7c00\nmov ax,\n"})

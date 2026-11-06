@@ -124,8 +124,11 @@ async def disasm(request):
     body = await request.json()
     addr = int(str(body.get("addr", "0")), 16)
     count = int(body.get("count", 32))
+    syntax = (body.get("syntax") or "intel").lower()
+    if syntax not in ("intel", "att"):
+        syntax = "intel"
     try:
-        out = await asyncio.to_thread(session().disasm_rows, addr, count)
+        out = await asyncio.to_thread(session().disasm_rows, addr, count, syntax)
     except OsLabError as exc:
         return web.json_response({"error": str(exc)}, status=400)
     return web.json_response(out)

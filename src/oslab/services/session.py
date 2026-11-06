@@ -198,8 +198,8 @@ class Session:
         rows = self._need_backend().mem_rows(addr & 0xFFFFFFF0, min(int(count), 1024))
         return {"addr": "%08x" % addr, "rows": rows}
 
-    def disasm_rows(self, addr, count=32):
-        rows = self._need_backend().disasm_rows(addr, min(int(count), 256))
+    def disasm_rows(self, addr, count=32, syntax="intel"):
+        rows = self._need_backend().disasm_rows(addr, min(int(count), 256), syntax)
         return {"addr": "%08x" % addr, "rows": rows, "eip": "%08x" % self.eip()}
 
     def snapshot(self):

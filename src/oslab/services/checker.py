@@ -23,7 +23,7 @@ def check(path, text):
     except AssembleError as exc:
         return {"ok": False, "errors": _parse(str(exc))}
     finally:
-        for suffix in ("", ".asm", ".dis", ".lst"):
+        for suffix in ("", ".asm", ".dis.intel", ".dis.att", ".lst"):
             try:
                 os.remove(image + suffix)
             except OSError:
