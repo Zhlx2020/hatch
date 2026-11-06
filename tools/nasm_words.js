@@ -1,0 +1,31 @@
+export const WORDS = new Set([
+  "aaa", "aad", "aam", "aas", "adc", "add", "and", "arpl", "bound", "bsf", "bsr", "bswap",
+  "bt", "btc", "btr", "bts", "call", "cbw", "cdq", "clc", "cld", "cli", "clts", "cmc",
+  "cmp", "cmpsb", "cmpsw", "cmpsd", "cmpxchg", "cwd", "cwde", "daa", "das", "dec", "div",
+  "enter", "hlt", "idiv", "imul", "in", "inc", "insb", "insw", "int", "int3", "into",
+  "invd", "invlpg", "iret", "iretd", "jcxz", "jecxz", "jmp", "lahf", "lar", "lds", "lea",
+  "leave", "les", "lfs", "lgs", "lidt", "lldt", "lmsw", "lock", "lodsb", "lodsw", "lodsd",
+  "loop", "loope", "loopne", "lsl", "lss", "ltr", "mov", "movsb", "movsw", "movsd",
+  "movsx", "movzx", "mul", "neg", "nop", "not", "or", "out", "outsb", "outsw", "pop",
+  "popa", "popad", "popf", "popfd", "push", "pusha", "pushad", "pushf", "pushfd", "rcl",
+  "rcr", "rdmsr", "rdtsc", "rep", "repe", "repne", "repnz", "repz", "ret", "retf", "rol",
+  "ror", "sahf", "sal", "sar", "sbb", "scasb", "scasw", "scasd", "sgdt", "shl", "shld",
+  "shr", "shrd", "sidt", "sldt", "smsw", "stc", "std", "sti", "stosb", "stosw", "stosd",
+  "str", "sub", "test", "verr", "verw", "wait", "wbinvd", "wrmsr", "xadd", "xchg", "xlat",
+  "xlatb", "xor",
+  "jz", "jnz", "je", "jne", "ja", "jae", "jb", "jbe", "jg", "jge", "jl", "jle",
+  "jc", "jnc", "jo", "jno", "js", "jns", "jp", "jnp", "jpe", "jpo",
+  "seta", "setae", "setb", "setbe", "sete", "setg", "setge", "setl", "setle",
+  "setne", "seto", "setz", "cmova", "cmovae", "cmovb", "cmovbe", "cmove", "cmovg",
+  "cmovge", "cmovl", "cmovle", "cmovne", "cmovz",
+  "byte", "word", "dword", "qword", "ptr", "short", "near", "far",
+]);
+
+export const DIRECTIVES = new Set([
+  "bits", "org", "section", "segment", "global", "extern", "align", "times", "equ",
+  "db", "dw", "dd", "dq", "dt", "resb", "resw", "resd", "incbin", "default", "cpu",
+  "%include", "%define", "%macro", "%endmacro", "%endm", "%if", "%ifdef", "%ifndef",
+  "%else", "%elif", "%endif", "%assign", "%rep", "%endrep", "%strlen", "%substr",
+  "%error", "%warning", "%push", "%pop", "%use", "%xdefine", "%undef", "%pathsearch",
+  "$", "$$",
+]);

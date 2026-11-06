@@ -11,6 +11,7 @@ ROUTES = [
     ("DELETE", "/api/node", handlers.node_delete),
     ("GET", "/api/file/{path:.+}", handlers.file_read),
     ("PUT", "/api/file/{path:.+}", handlers.file_write),
+    ("POST", "/api/check", handlers.check),
     ("POST", "/api/run", handlers.run),
     ("POST", "/api/step", handlers.step),
     ("POST", "/api/step-over", handlers.step_over),

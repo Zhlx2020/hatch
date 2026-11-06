@@ -47,3 +47,5 @@ export const regs = () => json("/api/regs");
 export const setReg = (name, value) => post("/api/reg", { name, value });
 export const mem = (addr, count) => post("/api/mem", { addr, count });
 export const disasm = (addr, count) => post("/api/disasm", { addr, count });
+
+export const check = (path, text) => post("/api/check", { path, text });

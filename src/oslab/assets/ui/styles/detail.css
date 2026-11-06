@@ -34,7 +34,7 @@
   background: #0b0d10;
   border: 1px solid var(--edge);
   border-radius: 0 0 5px 5px;
-  font: 12px/1.5 ui-monospace, Consolas, monospace;
+  font: 12px/1.5 "Cascadia Mono", Consolas, "Microsoft YaHei", monospace;
 }
 
 #detail-body .detail-bar, #detail-body .jump {
@@ -50,7 +50,7 @@
   background: #05070a;
   border: 1px solid var(--edge);
   border-radius: 3px;
-  color: var(--fg);
+  color: var(--text);
   font: inherit;
 }
 #detail-body .reg {
@@ -102,7 +102,7 @@
   color: #55606c;
   overflow: hidden;
 }
-#detail-body .disrow .op { color: var(--fg); }
+#detail-body .disrow .op { color: var(--text); }
 #detail-body .dot {
   width: 9px;
   height: 9px;
@@ -114,3 +114,5 @@
 #detail-body .dot.on { background: var(--danger); border-color: var(--danger); }
 
 .pane > h2 .more { margin-left: auto; }
+
+#detail-body button.accent { border-color: var(--accent); color: var(--accent); }

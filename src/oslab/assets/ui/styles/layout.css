@@ -77,3 +77,25 @@ aside {
   min-height: 0;
 }
 #panels .pane:first-child { grid-row: span 2; }
+
+#editor-body { display: flex; flex-direction: column; min-height: 0; }
+#editor-host { flex: 1; min-height: 0; overflow: hidden; }
+#editor-host .cm-editor { height: 100%; }
+#problems {
+  display: none;
+  max-height: 30%;
+  overflow: auto;
+  border-top: 1px solid var(--edge);
+  padding: 4px 8px;
+  font: 12px/1.6 ui-monospace, Consolas, monospace;
+  color: var(--danger);
+}
+#problems.open { display: block; }
+#problems .problem { white-space: pre-wrap; }
+#problems .at {
+  padding: 0 4px;
+  margin-right: 4px;
+  border-color: transparent;
+  color: var(--danger);
+  font: inherit;
+}

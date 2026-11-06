@@ -44,13 +44,14 @@ def test_asm_build_uses_include_dir(workdir):
     workspace.mkdir("boot", str(root))
     workspace.write("boot/banner.inc", BANNER, str(root))
     image = str(root / "boot.img")
-    build.build(MAIN, "boot/main.asm", image)
+    build.build(MAIN, "boot/main.asm", image, str(root))
     assert pathlib.Path(image).read_bytes()[510:512] == b"\x55\xaa"
 
 
 def test_unsupported_extension_is_rejected(workdir):
     with pytest.raises(OsLabError, match="不能运行"):
-        build.build("int main(){}", "boot/main.c", str(pathlib.Path(workdir) / "x.img"))
+        build.build("int main(){}", "boot/main.c",
+                str(pathlib.Path(workdir) / "x.img"), str(workdir))
 
 
 def test_c_is_reserved_but_not_runnable():

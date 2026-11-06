@@ -6,7 +6,7 @@ from aiohttp import web
 
 from .. import config
 from ..core.errors import OsLabError
-from ..services import workspace
+from ..services import checker, workspace
 from . import state as shared
 
 
@@ -129,6 +129,16 @@ async def disasm(request):
     except OsLabError as exc:
         return web.json_response({"error": str(exc)}, status=400)
     return web.json_response(out)
+
+
+async def check(request):
+    body = await request.json()
+    path = body.get("path", "")
+    try:
+        result = await asyncio.to_thread(checker.check, path, body.get("text", ""))
+    except OsLabError as exc:
+        return web.json_response({"error": str(exc)}, status=400)
+    return web.json_response(result)
 
 
 # control -------------------------------------------------------------

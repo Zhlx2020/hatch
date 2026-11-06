@@ -264,7 +264,16 @@ async function renderDisasm() {
   const next = document.createElement("button");
   next.textContent = "下 ▶";
   next.addEventListener("click", () => step(16 * 5));
-  wrap.append(follow, prev, next);
+  const runTo = document.createElement("button");
+  runTo.textContent = "运行到此处";
+  runTo.className = "accent";
+  runTo.addEventListener("click", async () => {
+    const target = hex(disAddr || eip, 8);
+    await api.addBreakpoint(target);
+    await api.cont();
+    close();
+  });
+  wrap.append(follow, prev, next, runTo);
   bodyEl.append(wrap);
 
   const data = await api.disasm(hex(disAddr || eip, 8), 48);

@@ -12,7 +12,7 @@ from ..backend.qemu.adapter import QemuBackend
 from ..backend.qemu.process import make_session_dir as make_qemu_dir, wait_free
 from ..core import state
 from ..core.arbiter import Arbiter
-from ..core.errors import BadTransition, OsLabError
+from ..core.errors import BackendError, BadTransition, OsLabError
 from ..display.rfb import RfbSource
 from ..display.vnc import VncSource
 from . import build, workspace

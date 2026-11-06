@@ -21,8 +21,8 @@ def register(*suffixes):
 
 
 @register(".asm")
-def _asm(text, path, image):
-    include_dir = os.path.dirname(workspace.full(path)) or workspace.root()
+def _asm(text, path, image, base=None):
+    include_dir = os.path.dirname(workspace.full(path, base)) or workspace.root(base)
     return assembler.assemble(text, image, includes=(include_dir,))
 
 
@@ -30,8 +30,8 @@ def supported(path):
     return workspace.ext(path) in HANDLERS
 
 
-def build(text, path, image):
+def build(text, path, image, base=None):
     handler = HANDLERS.get(workspace.ext(path))
     if handler is None:
         raise OsLabError("这个类型还不能运行：%s" % path)
-    return handler(text, path, image)
+    return handler(text, path, image, base)
