@@ -8,3 +8,5 @@ node_modules/
 *.img.asm
 *.img.dis
 *.lst
+workspace/e2e*/
+*.lst
