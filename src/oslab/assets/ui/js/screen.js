@@ -82,9 +82,14 @@ function pump() {
         const h = (rect[6] << 8) | rect[7];
         const enc = ((rect[8] << 24) | (rect[9] << 16) | (rect[10] << 8) | rect[11]) | 0;
         if (enc === -223) {
-          canvas.width = w;
-          canvas.height = h;
-          continue;
+          // 客户机换分辨率：重连一次，新会话会把整屏重发，
+          // 只改 canvas 大小的话 QEMU 只补变化的那块，边上会一直空着。
+          width = w;
+          height = h;
+          size();
+          clearInterval(timer);
+          setTimeout(connect, 0);
+          return;
         }
         if (enc !== 0) continue;
         if (!need(w * h * 4)) return;
@@ -114,16 +119,34 @@ function pump() {
 function size() {
   canvas.width = width;
   canvas.height = height;
+  fit();
 }
+
+// 画面按客户机分辨率等比放到这块区域里：先用放得下的比例，够大时再取整，
+// 免得 720x400 被拉成 720x478 那种非整数倍，字行疏密不匀、笔画糊。
+function fit() {
+  if (!width || !height) return;
+  const wrap = canvas.parentElement;
+  // clientWidth/Height 含内边距（10px + 10px），减掉才是能画的区域
+  const boxW = Math.max(wrap.clientWidth - 20, 1);
+  const boxH = Math.max(wrap.clientHeight - 20, 1);
+  let scale = Math.min(boxW / width, boxH / height);
+  if (scale >= 2) scale = Math.floor(scale);
+  canvas.style.width = Math.max(1, Math.floor(width * scale)) + "px";
+  canvas.style.height = Math.max(1, Math.floor(height * scale)) + "px";
+}
+
+addEventListener("resize", fit);
+new ResizeObserver(fit).observe(canvas.parentElement);
 
 export function request() {
   if (stage !== 5) return;
   const msg = new Uint8Array(10);
   msg[0] = 3;
-  msg[6] = height >> 8;
-  msg[7] = height & 255;
-  msg[8] = width >> 8;
-  msg[9] = width & 255;
+  msg[6] = width >> 8;      // 请求区域是 x, y, 宽, 高：宽在前
+  msg[7] = width & 255;
+  msg[8] = height >> 8;
+  msg[9] = height & 255;
   socket.send(msg);
 }
 
