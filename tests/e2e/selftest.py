@@ -13,6 +13,7 @@ import aiohttp
 
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8799
 BASE = "http://127.0.0.1:%d" % PORT
+STAMP = "e2e%d" % int(time.time())
 results = []
 
 
@@ -28,7 +29,20 @@ async def post(session, path, body=None):
 
 async def get(session, path):
     async with session.get(BASE + path) as resp:
-        return resp.status, await resp.json()
+        if resp.content_type == "application/json":
+            return resp.status, await resp.json()
+        return resp.status, {}
+
+
+def find(nodes, path):
+    for node in nodes:
+        if node["path"] == path:
+            return node
+        if node["kind"] == "dir":
+            hit = find(node["children"], path)
+            if hit:
+                return hit
+    return None
 
 
 async def main():
@@ -39,14 +53,41 @@ async def main():
             check("服务可连接", False, "先运行 python -m oslab --serve")
             return
 
-        status, files = await get(session, "/api/files")
-        check("文件列表可读", status == 200 and isinstance(files, list))
+        # 工作区树 ------------------------------------------------------
+        status, nodes = await get(session, "/api/tree")
+        check("工作区树可读", status == 200 and isinstance(nodes, list))
 
-        # 屏幕：连上 ws 应立刻收到 RFB 前缀
+        status, out = await post(session, "/api/node", {"path": STAMP, "kind": "dir"})
+        check("新建目录", status == 200, str(out))
+        status, out = await post(session, "/api/node", {"path": STAMP + "/t.asm", "kind": "file"})
+        check("新建文件", status == 200, str(out))
+
+        _, nodes = await get(session, "/api/tree")
+        check("新节点出现在树里", find(nodes, STAMP + "/t.asm") is not None)
+
+        status, out = await post(session, "/api/node/rename",
+                                 {"path": STAMP + "/t.asm", "name": STAMP + "-u.asm"})
+        check("重命名", status == 200 and out.get("path") == STAMP + "/" + STAMP + "-u.asm", str(out))
+
+        status, out = await post(session, "/api/node", {"path": "e2e/bad name.asm",
+                                                        "kind": "file"})
+        check("非法名字被拒", status == 400)
+
+        status, out = await post(session, "/api/node/move", {"path": STAMP + "/" + STAMP + "-u.asm", "dir": ""})
+        check("移动到根", status == 200 and out.get("path") == STAMP + "-u.asm", str(out))
+
+        status, out = await post(session, "/api/node", {"path": "../escape.asm", "kind": "file"})
+        check("路径穿越被拒", status == 400)
+
+        status, _ = await get(session, "/api/file/" + STAMP + "/" + STAMP + "-u.asm")
+        check("改名后旧路径消失", status == 404)
+
+        # 屏幕 ----------------------------------------------------------
         async with session.ws_connect(BASE + "/ws/screen") as ws:
             first = await asyncio.wait_for(ws.receive_bytes(), 5)
             check("屏幕握手有输出", first[:4] == b"RFB ")
 
+        # 运行与调试 ----------------------------------------------------
         status, out = await post(session, "/api/run", {"name": "keyboard.asm"})
         check("运行键值样例", status == 200 and out.get("state") == "running", str(out))
 
@@ -61,7 +102,7 @@ async def main():
         check("状态进入运行中", running)
 
         started = time.time()
-        _, snap = await get(session, "/api/state")
+        await get(session, "/api/state")
         elapsed = time.time() - started
         check("运行中取状态 <300ms", elapsed < 0.3, "%.0fms" % (elapsed * 1000))
 
@@ -79,8 +120,7 @@ async def main():
         check("单步可用", status == 200)
 
         _, snap = await get(session, "/api/state")
-        target = snap.get("eip")
-        status, out = await post(session, "/api/bp", {"addr": target})
+        status, out = await post(session, "/api/bp", {"addr": snap.get("eip")})
         check("设断点", status == 200, str(out))
         status, out = await post(session, "/api/cont")
         check("继续可用", status == 200, str(out))
@@ -88,9 +128,15 @@ async def main():
         _, text = await get(session, "/api/serial")
         check("串口有输出", "KEYBOARD" in text.get("text", ""))
 
-        await post(session, "/api/run", {"name": "shell.asm"})
+        await post(session, "/api/run", {"name": "serial.asm"})
         _, again = await get(session, "/api/state")
         check("再次运行后仍是运行中", again.get("state") == "running")
+
+        # 清理 ----------------------------------------------------------
+        async with session.delete(BASE + "/api/node?path=" + STAMP + "-u.asm") as resp:
+            check("删除移动到根的文件", resp.status == 200)
+        async with session.delete(BASE + "/api/node?path=" + STAMP) as resp:
+            check("删除目录", resp.status == 200)
 
     failures = results.count(False)
     print("\n%d/%d 通过" % (len(results) - failures, len(results)))

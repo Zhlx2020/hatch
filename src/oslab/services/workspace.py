@@ -34,7 +34,11 @@ def safe(path):
     clean = path.replace("\\", "/").strip("/")
     if not clean:
         return ""
-    for segment in clean.split("/"):
+    segments = [part for part in clean.split("/") if part and part != "."]
+    if not segments:
+        return ""
+    clean = "/".join(segments)
+    for segment in segments:
         if not segment or segment in (".", ".."):
             raise OsLabError("非法路径段：%s" % path)
         if not _ok_segment(segment):
