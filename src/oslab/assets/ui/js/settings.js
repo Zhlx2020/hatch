@@ -57,8 +57,13 @@ function paint() {
       <select id="s-profile">
         ${profiles.map((item) => `<option value="${esc(item.id)}">${esc(item.name)}</option>`).join("")}
       </select>
-      <div class="hint" id="s-profile-desc"></div>
     </label>
+    <div class="facts">
+      <div class="facts-desc" id="s-profile-desc"></div>
+      <div class="facts-title">这个模板固定的参数</div>
+      <table class="facts-list" id="s-profile-rows"></table>
+      <div class="facts-foot">这些开关不接受手写；要别的自己在下面加，撞车会被拒。</div>
+    </div>
     <label><span>附加参数（一行一个）</span>
       <textarea id="s-extra" spellcheck="false"></textarea>
       <div class="hint">模板之外的实验用：-no-reboot、-smp 2、-netdev user,id=n0 …</div>
@@ -69,8 +74,10 @@ function paint() {
   document.getElementById("s-extra").value = (data.qemu.extra || []).join("\n");
   const describe = () => {
     const found = profiles.find((item) => item.id === pick.value);
-    document.getElementById("s-profile-desc").textContent = found
-      ? found.desc + (found.screen === "serial" ? "（此模板没有画面，看串口）" : "")
+    document.getElementById("s-profile-desc").textContent = found ? found.desc : "";
+    document.getElementById("s-profile-rows").innerHTML = found
+      ? (found.rows || []).map((row) => `<tr><th>${esc(row.k)}</th>`
+          + `<td>${esc(row.v)}<code>${esc(row.arg)}</code></td></tr>`).join("")
       : "";
   };
   pick.addEventListener("change", describe);

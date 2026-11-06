@@ -21,26 +21,26 @@ PROFILES = {
     "floppy": {
         "name": "软盘 · VGA 画面",
         "desc": "默认档：512 字节引导扇区练习，软盘启动，串口留存做断言。",
-        "args": ["-boot", "a", "-m", "32", "-M", "pc",
+        "args": ["-boot", "a", "-m", "32", "-M", "pc", "-vga", "std",
                  "-drive", "file=%s,if=floppy,format=raw"],
         "screen": "vnc",
     },
     "disk": {
         "name": "硬盘 · VGA 画面",
         "desc": "从 IDE 硬盘启动自己的系统：MBR、分区表、文件系统都在这条路上。",
-        "args": ["-boot", "c", "-m", "64", "-M", "pc",
+        "args": ["-boot", "c", "-m", "64", "-M", "pc", "-vga", "std",
                  "-drive", "file=%s,if=ide,format=raw"],
         "screen": "vnc",
     },
     "iso": {
         "name": "光盘 · VGA 画面",
         "desc": "当成光盘启动，跑 El Torito 引导或整盘镜像。",
-        "args": ["-boot", "d", "-m", "64", "-M", "pc", "-cdrom", "%s"],
+        "args": ["-boot", "d", "-m", "64", "-M", "pc", "-vga", "std", "-cdrom", "%s"],
         "screen": "vnc",
     },
     "terminal": {
-        "name": "串口终端（无画面）",
-        "desc": "关掉显卡，串口当控制台：Linux 内核、bootloader 这类只看文本的活用它。",
+        "name": "串口终端 · 无画面（纯文本）",
+        "desc": "显卡整个关掉，只剩串口文本：Linux 内核、bootloader 这类只看文本的活用它。",
         "args": ["-boot", "c", "-m", "128", "-M", "pc", "-vga", "none",
                  "-drive", "file=%s,if=ide,format=raw"],
         "screen": "serial",
@@ -48,21 +48,21 @@ PROFILES = {
     "smp2": {
         "name": "双核 · 128MB",
         "desc": "两核大内存：练 SMP 启动、AP 唤醒、锁和调度。",
-        "args": ["-boot", "a", "-m", "128", "-M", "pc", "-smp", "2",
+        "args": ["-boot", "a", "-m", "128", "-M", "pc", "-vga", "std", "-smp", "2",
                  "-drive", "file=%s,if=floppy,format=raw"],
         "screen": "vnc",
     },
     "q35": {
         "name": "q35 · 64 位 CPU",
         "desc": "现代芯片组与长模式：PCIe、AHCI、x86_64 内核走这条。",
-        "args": ["-boot", "c", "-m", "256", "-M", "q35", "-cpu", "qemu64",
+        "args": ["-boot", "c", "-m", "256", "-M", "q35", "-cpu", "qemu64", "-vga", "std",
                  "-drive", "file=%s,if=ide,format=raw"],
         "screen": "vnc",
     },
     "net": {
         "name": "带网卡 · 用户态网络",
         "desc": "e1000 + user 网络，DHCP 与 TCP 自带；练驱动和协议栈够用。",
-        "args": ["-boot", "a", "-m", "64", "-M", "pc",
+        "args": ["-boot", "a", "-m", "64", "-M", "pc", "-vga", "std",
                  "-netdev", "user,id=n0", "-device", "e1000,netdev=n0",
                  "-drive", "file=%s,if=floppy,format=raw"],
         "screen": "vnc",
@@ -70,7 +70,7 @@ PROFILES = {
     "cold": {
         "name": "冷调试档",
         "desc": "禁重启、禁关机：崩了就停在原地，好事后看现场。",
-        "args": ["-boot", "a", "-m", "32", "-M", "pc", "-no-reboot", "-no-shutdown",
+        "args": ["-boot", "a", "-m", "32", "-M", "pc", "-vga", "std", "-no-reboot", "-no-shutdown",
                  "-drive", "file=%s,if=floppy,format=raw"],
         "screen": "vnc",
     },
@@ -103,10 +103,72 @@ def _path(base=None):
     return os.path.join(workspace.root(base), NAME)
 
 
+# 参数翻成人话：界面要把模板到底固定了什么摆出来，不能只给个名字
+FLAGS = {
+    "-m": ("内存", lambda v: v.replace(" ", "") + " MB"),
+    "-M": ("机器类型", lambda v: {"pc": "老式 PC，i440FX 芯片组",
+                                  "q35": "q35 芯片组，带 PCIe / AHCI"}.get(v, v)),
+    "-machine": ("机器类型", lambda v: v),
+    "-cpu": ("CPU", lambda v: "%s（QEMU 自带模型）" % v),
+    "-boot": ("启动设备", lambda v: {"a": "软盘", "c": "硬盘", "d": "光盘"}.get(v, v)),
+    "-vga": ("显卡", lambda v: "不装显卡，图形完全不可用" if v == "none"
+             else "%s，能显示图形" % ("标准 VGA" if v == "std" else v)),
+    "-smp": ("CPU 核数", lambda v: "%s 核" % v),
+    "-netdev": ("网络", lambda v: "用户态网络，自带 DHCP 和 DNS"
+                if v.split(",")[0] == "user" else v),
+    "-device": ("外设", lambda v: "%s 网卡" % v.split(",")[0]),
+    "-no-reboot": ("行为", lambda _v: "崩溃后不重启，停在现场"),
+    "-no-shutdown": ("行为", lambda _v: "关机后 QEMU 不退出"),
+}
+IMAGE = {"if=floppy": "当成软盘挂上当前镜像", "if=ide": "当成 IDE 硬盘挂上当前镜像"}
+
+
+def _drive_text(value):
+    for key, text in IMAGE.items():
+        if key in value:
+            return text
+    return "挂上当前镜像"
+
+
+def describe(name):
+    """把一个模板拆成「哪一项、设成什么、对应哪个参数」的行。"""
+    item = PROFILES.get(name) or PROFILES[DEFAULT_PROFILE]
+    rows = []
+    args = list(item["args"])
+    index = 0
+    while index < len(args):
+        flag = args[index]
+        value = ""
+        if index + 1 < len(args) and not args[index + 1].startswith("-"):
+            value = args[index + 1]
+            index += 1
+        index += 1
+        if flag == "-drive":
+            rows.append({"k": "镜像", "v": _drive_text(value), "arg": ("-drive " + value).strip()})
+            continue
+        if flag == "-cdrom":
+            rows.append({"k": "镜像", "v": "当成光盘挂上当前镜像",
+                         "arg": ("-cdrom " + value).strip()})
+            continue
+        label, render = FLAGS.get(flag, (flag, lambda v: v))
+        rows.append({"k": label, "v": render(value), "arg": (flag + " " + value).strip()})
+    if item["screen"] == "vnc":
+        rows.append({"k": "画面", "v": "开一个 VNC 窗口（127.0.0.1:%d），图形和文本都能看"
+                     % config.RFB_PORT,
+                     "arg": "-display vnc=127.0.0.1:%d" % config.VNC_HOST_PORT})
+    else:
+        rows.append({"k": "画面", "v": "不开窗口：屏幕那块直接显示串口文本",
+                     "arg": "-display none"})
+    rows.append({"k": "串口", "v": "独立收集，界面可以切过去看，不影响画面",
+                 "arg": "-serial tcp:127.0.0.1:%d" % config.SERIAL_PORT})
+    return rows
+
+
 def catalogue():
     """界面用的模板清单。"""
     return [{"id": key, "name": item["name"], "desc": item["desc"],
-             "screen": item["screen"]} for key, item in PROFILES.items()]
+             "screen": item["screen"], "rows": describe(key)}
+            for key, item in PROFILES.items()]
 
 
 def profile_args(name, image="%s"):

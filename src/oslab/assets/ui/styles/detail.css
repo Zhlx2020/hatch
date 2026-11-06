@@ -131,7 +131,7 @@
   top: 12vh;
   left: 50%;
   transform: translateX(-50%);
-  width: 520px;
+  width: 620px;
   max-height: 70vh;
   box-sizing: border-box;
   z-index: 70;
@@ -248,3 +248,50 @@
   border: 0;
 }
 #run-menu button:hover { background: var(--edge); }
+
+/* 模板到底固定了什么，摆成表，别让人猜 */
+#settings .facts {
+  border: 1px solid #1e262e;
+  border-radius: 6px;
+  background: #10151a;
+  padding: 8px 10px 10px;
+}
+#settings .facts-desc { color: #8b98a3; font-size: 12.5px; line-height: 1.5; }
+#settings .facts-title {
+  margin: 8px 0 4px;
+  color: #c6d0d8;
+  font-size: 12px;
+  letter-spacing: .04em;
+}
+#settings .facts-list {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  table-layout: fixed;
+  table-layout: fixed;
+}
+#settings .facts-list th {
+  width: 74px;
+  padding: 3px 6px 3px 0;
+  text-align: left;
+  font-weight: 400;
+  color: #6f7d88;
+  white-space: nowrap;
+}
+#settings .facts-list td {
+  padding: 3px 6px 5px 0;
+  color: #c6d0d8;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+#settings .facts-list code {
+  display: block;
+  margin-top: 2px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  color: #5fbf92;
+  font-family: Consolas, monospace;
+  font-size: 11.5px;
+  word-break: break-all;
+}
+#settings .facts-foot { margin-top: 6px; color: #5c6a73; font-size: 11.5px; }

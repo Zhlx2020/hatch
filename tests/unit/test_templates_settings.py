@@ -75,6 +75,23 @@ def test_catalogue_has_tested_profiles():
         assert item["desc"] and item["screen"] in ("vnc", "serial")
 
 
+def test_catalogue_spells_out_every_flag():
+    """界面要能看见模板到底固定了什么，包括显卡和画面到底是哪种。"""
+    for item in settings.catalogue():
+        kinds = {row["k"] for row in item["rows"]}
+        assert {"内存", "显卡", "画面", "串口"} <= kinds
+        for row in item["rows"]:
+            assert row["v"] and row["arg"].startswith("-")
+    terminal = {row["k"]: row for row in
+                next(i for i in settings.catalogue() if i["id"] == "terminal")["rows"]}
+    assert "不装显卡" in terminal["显卡"]["v"]
+    assert terminal["显卡"]["arg"] == "-vga none"
+    assert "不开窗口" in terminal["画面"]["v"]
+    floppy = {row["k"]: row for row in
+              next(i for i in settings.catalogue() if i["id"] == "floppy")["rows"]}
+    assert "能显示图形" in floppy["显卡"]["v"]
+
+
 def test_profile_args_are_complete():
     """每个模板都得自己带启动设备与显示，托管项只留端口。"""
     for name in settings.PROFILES:
