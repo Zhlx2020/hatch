@@ -1,3 +1,4 @@
+import * as hint from "./hint.js";
 import * as socket from "./socket.js";
 
 const canvas = document.getElementById("screen");
@@ -95,6 +96,7 @@ function pump() {
           px[i + 3] = 255;
         }
         ctx.putImageData(new ImageData(px, w, h), x, y);
+        hint.ready();
       }
       continue;
     }

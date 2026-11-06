@@ -286,8 +286,8 @@ async function renderDisasm() {
   const next = document.createElement("button");
   next.textContent = "下 ▶";
   next.addEventListener("click", () => step(16 * 5));
-  const bar = document.createElement("div");
-  bar.className = "detail-bar";
+  const modes = document.createElement("span");
+  modes.className = "modes";
   for (const [key, label] of [["intel", "Intel"], ["att", "AT&T"]]) {
     const button = document.createElement("button");
     button.textContent = label;
@@ -296,9 +296,9 @@ async function renderDisasm() {
       syntax = key;
       renderDisasm();
     });
-    bar.append(button);
+    modes.append(button);
   }
-  wrap.append(bar);
+  wrap.append(modes);
 
   const runTo = document.createElement("button");
   runTo.textContent = "运行到此处";

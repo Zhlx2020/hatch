@@ -48,7 +48,15 @@ function render(parent, nodes, depth) {
 
     const label = document.createElement("span");
     label.className = "label";
-    label.textContent = node.name;
+    if (node.kind === "file" && node.ext) {
+      label.textContent = node.name.slice(0, -node.ext.length);
+      const ext = document.createElement("span");
+      ext.className = "ext";
+      ext.textContent = node.ext;
+      label.append(ext);
+    } else {
+      label.textContent = node.name;
+    }
     row.append(label);
 
     if (node.kind === "dir") {

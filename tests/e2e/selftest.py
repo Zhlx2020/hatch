@@ -165,6 +165,13 @@ async def main():
         _, again = await get(session, "/api/state")
         check("再次运行后仍是运行中", again.get("state") == "running")
 
+        status, bad = await post(session, "/api/run", {"name": "boot/banner.inc"})
+        _, failed = await get(session, "/api/state")
+        check("装了不能跑的文件会说清原因",
+              status == 400 and "不能运行" in (bad.get("error") or "")
+              and failed.get("state") == "faulted"
+              and "不能运行" in (failed.get("error") or ""), str(failed)[:80])
+
         # 清理 ----------------------------------------------------------
         async with session.delete(BASE + "/api/node?path=" + STAMP + "-u.asm") as resp:
             check("删除移动到根的文件", resp.status == 200)

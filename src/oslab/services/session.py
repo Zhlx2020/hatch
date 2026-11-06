@@ -3,6 +3,7 @@ import os
 import re
 import socket
 import threading
+import traceback
 import time
 
 from .. import config
@@ -82,7 +83,8 @@ class Session:
 
                 self.last_error = ""
             except Exception as exc:
-                self.last_error = str(exc)
+                traceback.print_exc()
+                self.last_error = str(exc) or exc.__class__.__name__
                 try:
                     self.arbiter.to(state.FAULTED, str(exc))
                 except BadTransition:
@@ -208,7 +210,8 @@ class Session:
         if self.arbiter.state in (state.RUNNING, state.BOOTING):
             text, cursor = self.serial.since(self.cursor) if self.serial else ("", 0)
             self.cursor = cursor
-            return dict(self.cache, state=self.arbiter.state, file=self.file, serial=text)
+            return dict(self.cache, state=self.arbiter.state, file=self.file,
+                        serial=text, error=self.last_error)
         return self._snapshot()
 
     def _snapshot(self):
@@ -226,6 +229,8 @@ class Session:
             data["error"] = "读取超时：%s" % exc
         data["state"] = self.arbiter.state
         data["file"] = self.file
+        if self.last_error and "error" not in data:
+            data["error"] = self.last_error
         data["bps"] = self.breakpoints()
         data["serial"] = self.serial.since(self.cursor)[0] if self.serial else ""
         self.cache = {k: v for k, v in data.items() if k not in ("serial", "state")}
