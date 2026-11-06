@@ -85,9 +85,13 @@ class Rsp:
             return self._recv_packet()
 
     def interrupt(self, timeout=3.0):
+        """Break into the guest. A silent stub is not fatal: return b""."""
         with self.lock:
             self.sock.sendall(b"\x03")
-            return self._recv_packet(timeout)
+            try:
+                return self._recv_packet(timeout)
+            except socket.timeout:
+                return b""
 
     def detach(self):
         with self.lock:

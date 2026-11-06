@@ -150,6 +150,8 @@ async def run(request):
         return web.json_response(result)
     except OsLabError as exc:
         return web.json_response({"error": str(exc)}, status=400)
+    except (OSError, TimeoutError) as exc:
+        return web.json_response({"error": "启动失败：%s" % exc}, status=500)
 
 
 async def step(_request):

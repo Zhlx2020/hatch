@@ -59,7 +59,7 @@ class Session:
                 try:
                     self._need_backend().pause()
                     self.arbiter.to(state.STOPPED, "pre-run")
-                except (BackendError, BadTransition):
+                except (BackendError, BadTransition, OSError, TimeoutError):
                     pass
             self.arbiter.to(state.BOOTING, "assemble")
             try:
