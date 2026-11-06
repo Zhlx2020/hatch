@@ -29,7 +29,7 @@ export const moveNode = (path, dir) => post("/api/node/move", { path, dir });
 export const deleteNode = (path) =>
   json("/api/node?path=" + encodeURIComponent(path), { method: "DELETE" });
 
-export const run = (name) => post("/api/run", { name });
+export const run = (name, lines, buildOnly) => post("/api/run", { name, lines: lines || [], build: !!buildOnly });
 export const step = () => post("/api/step");
 export const stepOver = () => post("/api/step-over");
 export const cont = () => post("/api/cont");
@@ -50,3 +50,17 @@ export const disasm = (addr, count, syntax) =>
   post("/api/disasm", { addr, count, syntax });
 
 export const check = (path, text) => post("/api/check", { path, text });
+
+export const line = (path, row) =>
+  json("/api/line?path=" + encodeURIComponent(path) + "&line=" + row);
+
+export const settings = () => json("/api/settings");
+export const saveSettings = (data) =>
+  json("/api/settings", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(data || {}),
+  });
+
+export const templates = () => json("/api/templates");
+export const applyTemplate = (name, dir) => post("/api/template", { name, dir });

@@ -50,10 +50,16 @@ def test_asm_build_uses_include_dir(workdir):
 
 def test_unsupported_extension_is_rejected(workdir):
     with pytest.raises(OsLabError, match="不能运行"):
-        build.build("int main(){}", "boot/main.c",
-                str(pathlib.Path(workdir) / "x.img"), str(workdir))
+        build.build("print 1", "boot/notes.txt",
+                    str(pathlib.Path(workdir) / "x.img"), str(workdir))
 
 
-def test_c_is_reserved_but_not_runnable():
-    assert not build.supported("a.c")
+def test_c_without_manifest_says_so(workdir):
+    with pytest.raises(OsLabError, match="oslab.toml"):
+        build.build("int main(){}", "main.c",
+                    str(pathlib.Path(workdir) / "x.img"), str(workdir))
+
+
+def test_c_is_runnable_by_suffix():
+    assert build.supported("a.c")
     assert build.supported("a.asm")

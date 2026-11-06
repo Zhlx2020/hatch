@@ -15,8 +15,8 @@ SEGMENTS = ("cs", "ss", "ds", "es", "fs", "gs")
 
 
 class QemuBackend:
-    def __init__(self, session_dir, image):
-        self._proc = QemuProcess(session_dir, image)
+    def __init__(self, session_dir, image, tune=None):
+        self._proc = QemuProcess(session_dir, image, tune)
         self._image = image
         self._rsp = None
         self._lines = []

@@ -2,10 +2,11 @@
 
 在本地窗口里写引导扇区、起机器、下断点、看画面与串口。这是一台工作站，不是教程播放器。
 
-- 写：CodeMirror 6 编辑器，NASM 高亮、指令/寄存器/标签补全、保存即校验并标行
+- 写：CodeMirror 6 编辑器，NASM/C 高亮、补全、保存即校验并标行；点行号就是断点
 - 组织：左栏是资源管理器，任意层级目录、右键新建改名删除、拖拽移动
 - 起：QEMU 无窗口启动，画面走 VNC 32bpp，调试走 gdb 远程协议
 - 调：暂停、单步、越过、运行到光标、断点、寄存器（可写、按位、按宽度）、内存任意地址、反汇编任意地址
+- 语言：汇编直接编；C 走 32 位内核模板（引导扇区 + 链接脚本 + 行号映射）
 - 看：只有一块 VGA 画面；刷新浏览器不丢会话
 
 ## 运行
@@ -17,11 +18,40 @@ python -m oslab --serve    # 只起服务，浏览器开 127.0.0.1:8799
 
 依赖：`qemu-system-i386`、`nasm`、`pywebview`、`aiohttp`，路径集中在 `src/oslab/config.py`。
 
+## 工程清单
+
+带运行含义的目录放一份 `oslab.toml`：
+
+```toml
+kind = "c"                                  # c | asm
+entry = "src/kmain.c"
+sources = ["src/kmain.c", "src/screen.c"]
+boot = "boot/boot.asm"                      # 16 位引导扇区
+link = "boot/kernel.ld"
+```
+
+没有清单的裸 `.asm` 仍按单文件汇编运行。清单在 `services/project.py` 里校验，
+缺项、类型错、文件不存在都会直说。
+
+新建文件按钮里可以选「从模板新建」，自带 `asm-hello` 与 `c-hello` 两套。
+
+## 断点
+
+在编辑器点行号出红点，再点运行：服务端构建完立刻按行号解析地址、写好断点才放行，
+不会跑过头。红色打点、行高亮、寄存器里的 `eip` 都对得上；点第二下取消。
+构建后映射会更新，旧红点自动重算。
+
+## 启动按钮与 QEMU
+
+顶栏「设置」里能改按钮文字、悬停提示、点击行为（构建并运行 / 只构建）、是否停在入口，
+以及内存、机器类型、CPU、白名单附加参数。配置落在 `workspace/settings.toml`，
+保存前校验（不认识或已被托管的参数会拒绝），重启会话后生效。
+
 ## 验收
 
 ```
-python -m pytest tests/unit -q      # 单元：工作区、汇编、反汇编、源映射、状态机、校验
-python tests/e2e/selftest.py        # 端到端：目录 CRUD、起机、中断、断点、监视面、串口、单实例
+python -m pytest tests/unit -q      # 单元：工作区、汇编、C 构建、行映射、反汇编、配置、校验
+python tests/e2e/selftest.py        # 端到端：目录 CRUD、起机、断点（含 C 行断点）、模板、配置、串口、单实例
 ```
 
 两项都必须全绿才算可交付。
@@ -49,12 +79,14 @@ node tools/build_editor.mjs
 - 刷新浏览器不影响客户机：画面与串口都会重新接上并回放
 - 键盘走 X11 keysym，连接时补发全键松开，避免刷新后按键卡住
 - 不判题、不内置章节；`workspace/` 里的文件就是全部工作单元
-- 只有 `.asm` 能运行，其余后缀等工具链接入后由 `services/build.py` 注册
+- 只有 `.asm` 与带清单的 `.c` 能运行，其余后缀由 `services/build.py` 拒绝并说明
+- C 工具链默认用 `.work/w64/w64devkit/bin` 的 `gcc/ld/objcopy`，路径在 `config.py`
 
 ## 文档
 
 - `docs/architecture.md` 分层与数据流
 - `docs/workspace.md` 目录与文件规则
+- `docs/c.md` C 工程怎么构成、怎么编、断点怎么落地
 - `docs/decisions/` 逐条决策记录
 
 不要往 `src/oslab/` 之外写产品代码。

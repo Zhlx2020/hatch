@@ -11,13 +11,15 @@ import {
 import { tags } from "@lezer/highlight";
 import { highlightSelectionMatches, searchKeymap } from "@codemirror/search";
 import { setDiagnostics } from "@codemirror/lint";
-import { EditorState, Prec, StateEffect, StateField } from "@codemirror/state";
+import { EditorState, Prec, RangeSet, RangeSetBuilder, StateEffect, StateField } from "@codemirror/state";
 import {
   Decoration,
   EditorView,
   drawSelection,
   highlightActiveLine,
   highlightActiveLineGutter,
+  gutter,
+  GutterMarker,
   keymap,
   lineNumbers,
   placeholder,
@@ -64,6 +66,9 @@ const theme = EditorView.theme(
     },
     ".cm-content": { caretColor: "#5fbf92" },
     ".cm-gutters": { background: "transparent", border: "0", color: "#4a555f" },
+        ".cm-bpGutter": { width: "14px", cursor: "pointer" },
+        ".cm-bpDot": { display: "block", width: "8px", height: "8px", margin: "6px auto 0",
+          borderRadius: "50%", background: "#e5534b" },
     ".cm-activeLine": { background: "#ffffff06" },
     ".cm-execLine": { background: "#5fbf9218", boxShadow: "inset 2px 0 0 #5fbf92" },
     ".cm-activeLineGutter": { color: "#5fbf92", background: "transparent" },
@@ -132,6 +137,59 @@ const execPlugin = ViewPlugin.fromClass(
   { decorations: (value) => value.decorations },
 );
 
+// 行断点：字段存行号，gutter 画红点，点击交给面板去解析地址
+const setBps = StateEffect.define();
+
+const bpLines = StateField.define({
+  create: () => [],
+  update(value, tr) {
+    for (const effect of tr.effects) {
+      if (effect.is(setBps)) value = effect.value;
+    }
+    return value;
+  },
+});
+
+class BpDot extends GutterMarker {
+  toDOM() {
+    const dot = document.createElement("span");
+    dot.className = "cm-bpDot";
+    return dot;
+  }
+}
+
+const bpDot = new BpDot();
+const bpBlank = new (class extends GutterMarker {})();
+
+const bpMarkers = ViewPlugin.fromClass(
+  class {
+    constructor(view) {
+      this.markers = this.build(view);
+    }
+    update(update) {
+      if (update.docChanged || update.viewportChanged
+        || update.state.field(bpLines) !== update.startState.field(bpLines)) {
+        this.markers = this.build(update.view);
+      }
+    }
+    // 每一行都给一个标记：没有断点的用空标记，gutter 才会为整屏建出可点行
+    build(view) {
+      const marked = new Set(view.state.field(bpLines));
+      const builder = new RangeSetBuilder();
+      for (const range of view.visibleRanges) {
+        let pos = range.from;
+        while (pos <= range.to) {
+          const line = view.state.doc.lineAt(pos);
+          builder.add(line.from, line.from, marked.has(line.number) ? bpDot : bpBlank);
+          pos = line.to + 1;
+        }
+      }
+      return builder.finish();
+    }
+  },
+  { markers: (value) => value.markers },
+);
+
 function words() {
   return [...WORDS, ...REGISTERS, ...DIRECTIVES].map((label) => ({
     label,
@@ -165,7 +223,7 @@ function nasmCompletions(context) {
   return { from: word.from, options: [...words(), ...labels(context.state)] };
 }
 
-export function create(parent, { onSave, onChange } = {}) {
+export function create(parent, { onSave, onChange, onToggleLine } = {}) {
   const state = EditorState.create({
     doc: "",
     extensions: [
@@ -183,6 +241,19 @@ export function create(parent, { onSave, onChange } = {}) {
       highlight,
       execField,
       execPlugin,
+      bpLines,
+      bpMarkers,
+      gutter({
+        class: "cm-bpGutter",
+        markers: (view) => view.plugin(bpMarkers)?.markers ?? RangeSet.empty,
+        domEventHandlers: {
+          mousedown(view, line, ev) {
+            ev.preventDefault();
+            if (onToggleLine) onToggleLine(view.state.doc.lineAt(line.from).number);
+            return true;
+          },
+        },
+      }),
       EditorState.tabSize.of(8),
       indentUnit.of("    "),
       placeholder("这里是你的引导扇区…"),
@@ -230,6 +301,12 @@ export function create(parent, { onSave, onChange } = {}) {
     focus: () => view.focus(),
     markLine(line) {
       view.dispatch({ effects: setExec.of(line || 0) });
+    },
+    breakpoints() {
+      return [...view.state.field(bpLines)];
+    },
+    setBreakpoints(lines) {
+      view.dispatch({ effects: setBps.of([...(lines || [])]) });
     },
     scrollTo(line) {
       try {

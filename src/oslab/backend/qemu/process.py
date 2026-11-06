@@ -4,17 +4,30 @@ import subprocess
 import time
 
 from ... import config
+from ...services import settings
 
 ARGS = [
-    "-m", "32",
     "-boot", "a",
     "-display", "vnc=127.0.0.1:%d" % config.VNC_HOST_PORT,
     "-gdb", "tcp:%s:%d" % (config.HOST, config.GDB_PORT),
     "-serial", "tcp:%s:%d,server=on,wait=off" % (config.HOST, config.SERIAL_PORT),
     "-monitor", "none",
-    "-S",
     "-drive", "file=%s,if=floppy,format=raw",
 ]
+
+
+def command(image, tune=None):
+    """完整命令行：先托管项，再用户配置，最后镜像与暂停开关。"""
+    tune = tune or settings.load()
+    args = [config.QEMU, "-m", str(tune["qemu"]["memory"])]
+    if tune["qemu"]["machine"]:
+        args += ["-machine", tune["qemu"]["machine"]]
+    if tune["qemu"]["cpu"]:
+        args += ["-cpu", tune["qemu"]["cpu"]]
+    args += [a % image if "%s" in a else a for a in ARGS]
+    args += tune["qemu"]["extra"]
+    args.append("-S")          # 一定从复位停住，避免断点被抢跑
+    return args
 
 
 def make_session_dir():
@@ -28,13 +41,14 @@ def make_session_dir():
 
 
 class QemuProcess:
-    def __init__(self, session_dir, image):
+    def __init__(self, session_dir, image, tune=None):
         self.dir = session_dir
         self.image = image
+        self.tune = tune
         self.proc = None
 
     def start(self):
-        args = [config.QEMU] + [a % self.image if "%s" in a else a for a in ARGS]
+        args = command(self.image, self.tune)
         self.proc = subprocess.Popen(
             args,
             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,

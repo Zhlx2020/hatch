@@ -1,6 +1,7 @@
 import * as api from "./api.js";
 import * as detail from "./detail.js";
 import * as editor from "./editor.js";
+import * as settings from "./settings.js";
 import * as hint from "./hint.js";
 import * as input from "./input.js";
 import * as panels from "./panels.js";
@@ -8,6 +9,7 @@ import * as screen from "./screen.js";
 import * as tree from "./tree.js";
 
 const statusEl = document.getElementById("status");
+const C_RUNNABLE = [".asm", ".c"];
 const CONTROLS = ["run", "pause", "cont", "step", "step-over", "reset"]
   .map((id) => document.getElementById(id));
 
@@ -44,16 +46,16 @@ async function refresh() {
 }
 
 async function boot() {
-  let path = tree.selected();
-  if (path && !path.endsWith(".asm")) {
-    const first = document.querySelector("#tree .row.file.asm");
+  let path = editor.file() || tree.selected();
+  if (path && !C_RUNNABLE.some((suffix) => path.endsWith(suffix))) {
+    const first = document.querySelector("#tree .row.file");
     if (first) {
       await tree.open(first.dataset.path);
       path = tree.selected();
     }
   }
-  if (!path || !path.endsWith(".asm")) {
-    say("先选一个 .asm 再运行", true);
+  if (!path || !C_RUNNABLE.some((suffix) => path.endsWith(suffix))) {
+    say("先选一个 .asm 或 .c 文件再运行", true);
     return;
   }
   await editor.flush();
@@ -62,9 +64,14 @@ async function boot() {
   await guarded(async () => {
     say("构建中…");
     panels.clearSerial();
-    const result = await api.run(path);
+    window.__ran = (window.__ran || []).concat([path, editor.breakpoints().length]);
+    const result = await api.run(path, editor.breakpoints(), settings.current().run.action === "build");
     if (result.error) say(result.error, true);
-    else say("已启动 " + path);
+    else {
+      say("已启动 " + path);
+      // 地址由服务端在构建后立刻解析，这里只同步一次红点状态
+      await editor.applyBreakpoints();
+    }
     return result;
   });
 }
@@ -82,7 +89,7 @@ document.getElementById("step-over").addEventListener("click", () => guarded(api
 document.getElementById("pause").addEventListener("click", () => guarded(api.pause));
 document.getElementById("cont").addEventListener("click", () => guarded(api.cont));
 document.getElementById("reset").addEventListener("click", () => guarded(api.reset));
-document.getElementById("new-file").addEventListener("click", () => editor.createIn(""));
+document.getElementById("new-file").addEventListener("click", showTemplates);
 document.getElementById("new-dir").addEventListener("click", async () => {
   const path = window.prompt("新目录路径", "src");
   if (!path) return;
@@ -95,7 +102,47 @@ document.getElementById("del-file").addEventListener("click", async () => {
   await tree.refresh();
 });
 
+const tplBox = document.getElementById("templates");
+
+async function showTemplates() {
+  const list = await api.templates();
+  const body = document.getElementById("templates-body");
+  body.textContent = "";
+  if (list.error) return say(list.error, true);
+  if (!list.length) {
+    const empty = document.createElement("button");
+    empty.textContent = "没有模板";
+    body.append(empty);
+  }
+  for (const item of list) {
+    const button = document.createElement("button");
+    button.textContent = item.name;
+    const summary = document.createElement("span");
+    summary.className = "summary";
+    summary.textContent = item.summary || "";
+    button.append(summary);
+    button.addEventListener("click", () => useTemplate(item.name));
+    body.append(button);
+  }
+  tplBox.classList.add("open");
+}
+
+async function useTemplate(name) {
+  const dir = window.prompt("放到哪个目录", name);
+  if (!dir) return;
+  const out = await api.applyTemplate(name, dir.replace(/\/+$/, ""));
+  if (out.error) return say(out.error, true);
+  tplBox.classList.remove("open");
+  await tree.refresh();
+  if (out.entry) await tree.open(out.entry);
+  say("已从模板创建 " + out.dir);
+}
+
+document.getElementById("templates-close").addEventListener("click",
+  () => tplBox.classList.remove("open"));
+
 editor.install();
+settings.install();
 detail.install();
 input.install();
 screen.connect();
@@ -103,7 +150,7 @@ panels.loadSerial();
 setInterval(refresh, 400);
 
 tree.install((path, text) => editor.show(path, text)).then(() => {
-  const first = document.querySelector("#tree .row.file.asm")
-    || document.querySelector("#tree .row.file");
+  const first = [...document.querySelectorAll("#tree .row.file")]
+    .find((row) => C_RUNNABLE.some((suffix) => row.dataset.path.endsWith(suffix)));
   if (first) tree.open(first.dataset.path);
 });

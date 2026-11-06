@@ -6,6 +6,10 @@ BOCHS_SHARE = r"C:\software\Bochs-3.0"
 NASM = r"C:\Users\zlx\Documents\deepseek-harness\default-workspace\osdev-lab\tools\nasm-3.02\nasm.exe"
 OBJDUMP = r"C:\Users\zlx\Documents\deepseek-harness\default-workspace\oslab\.work\w64\w64devkit\bin\objdump.exe"
 QEMU = r"C:\Program Files\qemu\qemu-system-i386.exe"
+_W64 = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", ".work", "w64", "w64devkit", "bin")
+C_GCC = os.path.abspath(os.path.join(_W64, "gcc.exe"))
+C_LD = os.path.abspath(os.path.join(_W64, "ld.exe"))
+C_OBJCOPY = os.path.abspath(os.path.join(_W64, "objcopy.exe"))
 
 HOST = "127.0.0.1"
 PORT = 8799

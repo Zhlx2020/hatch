@@ -1,0 +1,10 @@
+kind = "c"
+entry = "src/kmain.c"
+sources = ["src/kmain.c", "src/screen.c", "src/keyboard.c"]
+boot = "boot/boot.asm"
+link = "boot/kernel.ld"
+
+[run]
+label = "构建并运行"
+hint = "在编辑器点行号打红点，启动后会在那里停住"
+pause_at_entry = true

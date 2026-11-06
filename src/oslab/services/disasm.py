@@ -25,7 +25,7 @@ def build(image, base=0x7C00, out=None):
         target = out if (out and len(SYNTAXES) == 1) else path(image, syntax)
         result = subprocess.run(
             [config.OBJDUMP, "-D", "-b", "binary", "-m", "i386", "-M", "i8086,%s" % syntax,
-             "--adjust-vma=0x%x" % base, image],
+             "--insn-width=16", "--adjust-vma=0x%x" % base, image],
             capture_output=True, text=True,
         )
         lines = []
@@ -36,6 +36,37 @@ def build(image, base=0x7C00, out=None):
                                                  match.group(2).strip(), match.group(3)))
         with open(target, "w", newline="\n", encoding="utf-8") as fh:
             fh.write("\n".join(lines))
+        written.append(target)
+    return written[0]
+
+
+def build_split(image, regions, out=None):
+    """Disassemble several (file, address, bits) regions into one sorted map.
+
+    A boot stub and a kernel linked far apart cannot share one linear pass: the
+    stub is 16-bit at 0x7C00 and the kernel is 32-bit at 0x10000, so each region
+    gets its own base and decoder and the results are merged by address.
+    """
+    written = []
+    for syntax in SYNTAXES:
+        lines = []
+        for source, base, bits in regions:
+            arch = "i8086" if bits == 16 else "i386"
+            result = subprocess.run(
+                [config.OBJDUMP, "-D", "-b", "binary", "-m", "i386",
+                 "-M", "%s,%s" % (arch, syntax), "--insn-width=16",
+                 "--adjust-vma=0x%x" % base, source],
+                capture_output=True, text=True,
+            )
+            for line in result.stdout.splitlines():
+                match = LINE.match(line)
+                if match:
+                    lines.append((int(match.group(1), 16), match.group(2).strip(),
+                                  match.group(3)))
+        lines.sort(key=lambda row: row[0])
+        target = out or path(image, syntax)
+        with open(target, "w", newline="\n", encoding="utf-8") as fh:
+            fh.write("\n".join("%08x: %-24s %s" % row for row in lines))
         written.append(target)
     return written[0]
 

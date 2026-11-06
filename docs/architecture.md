@@ -8,7 +8,7 @@ __main__        入口：serve / window，单实例锁与端口清理
     server.py   app 装配
     routes.py   路由表
     handlers.py 处理器
-  services/     可复用能力（会话、组装、静态反汇编、串口、工作区）
+  services/     可复用能力（会话、组装/C 构建、行映射、静态反汇编、串口、工作区、配置）
   core/         仲裁器与状态：唯一状态机、唯一锁
   backend/      调试后端（协议在 base.py 之后）：qemu/ 默认，bochs/ 保留
   display/      画面来源（协议在 base.py 之后）：qemu 走 vnc.py
@@ -34,8 +34,9 @@ __main__        入口：serve / window，单实例锁与端口清理
 QEMU 5901 → display.vnc（原样转发 32bpp）→ ws → 画布（BGRX→RGBA 在客户端）
 按钮 → services.session → core.arbiter → backend.qemu.adapter → gdb 5913
 客户机 COM1 → chardev 5914 → services.serial → /api/serial（可回放，界面不显示）
-保存 → services.checker → nasm → 诊断行（编辑器标红）
-组装 → nasm -l → services.sourcemap → 暂停时标记当前源码行
+保存 → services.checker → nasm/cc → 诊断行（编辑器标红）
+点行号 → services.linemap（nasm 列表或 objdump -dl）→ 地址 → gdb 断点
+组装 → nasm -l 或 gcc+ld+objcopy → services.sourcemap → 暂停时标记当前源码行
 ```
 
 ## 为什么不用 Bochs 的调试器
@@ -50,3 +51,4 @@ QEMU 的 gdb stub 一个 `0x03` 字节就能异步中断，VNC 原生 32bpp、�
 - 新后端：实现 `backend/base.py` 的协议，在 `session.py` 注册，跑同一批 e2e。
 - 新画面源：实现 `display/base.py`，选择由 `config.py` 决定。
 - 新主题：只动 `assets/ui/styles/`，颜色全走 `base.css` 变量。
+- 新语言：在 `services/build.py` 注册后缀并返回 `(镜像, 行映射)`；映射统一成 `路径 → {行: 地址}`。

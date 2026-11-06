@@ -12,6 +12,10 @@ ROUTES = [
     ("GET", "/api/file/{path:.+}", handlers.file_read),
     ("PUT", "/api/file/{path:.+}", handlers.file_write),
     ("POST", "/api/check", handlers.check),
+    ("GET", "/api/templates", handlers.templates_list),
+    ("POST", "/api/template", handlers.templates_apply),
+    ("GET", "/api/settings", handlers.settings_get),
+    ("PUT", "/api/settings", handlers.settings_put),
     ("POST", "/api/run", handlers.run),
     ("POST", "/api/step", handlers.step),
     ("POST", "/api/step-over", handlers.step_over),
@@ -26,6 +30,7 @@ ROUTES = [
     ("POST", "/api/reg", handlers.reg_set),
     ("POST", "/api/mem", handlers.mem),
     ("POST", "/api/disasm", handlers.disasm),
+    ("GET", "/api/line", handlers.line),
     ("POST", "/api/tables", handlers.tables),
     ("GET", "/ws/screen", handlers.screen),
 ]

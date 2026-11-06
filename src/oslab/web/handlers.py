@@ -6,7 +6,7 @@ from aiohttp import web
 
 from .. import config
 from ..core.errors import OsLabError
-from ..services import checker, workspace
+from ..services import checker, settings, templates, workspace
 from . import state as shared
 
 
@@ -120,6 +120,16 @@ async def mem(request):
     return web.json_response(out)
 
 
+async def line(request):
+    """Address of a source line in the last build; 0 when unmapped."""
+    path = request.query.get("path", "")
+    line = int(request.query.get("line", "0") or 0)
+    current = session()
+    addr = current.line_addr(path, line)
+    reason = "" if addr else "还没构建过这个文件，或者这行没有代码"
+    return web.json_response({"addr": "%08x" % addr if addr else "", "reason": reason})
+
+
 async def disasm(request):
     body = await request.json()
     addr = int(str(body.get("addr", "0")), 16)
@@ -145,11 +155,42 @@ async def check(request):
 
 
 # control -------------------------------------------------------------
+async def templates_list(request):
+    return web.json_response(templates.entries())
+
+
+async def templates_apply(request):
+    body = await request.json()
+    try:
+        out = await asyncio.to_thread(templates.apply, body.get("name", ""),
+                                      body.get("dir", ""))
+    except OsLabError as exc:
+        return web.json_response({"error": str(exc)}, status=400)
+    return web.json_response(out)
+
+
+async def settings_get(request):
+    return web.json_response(settings.load())
+
+
+async def settings_put(request):
+    body = await request.json()
+    try:
+        data = settings.save(body)
+    except OsLabError as exc:
+        return web.json_response({"error": str(exc)}, status=400)
+    return web.json_response(data)
+
+
 async def run(request):
     body = await request.json()
     name = body.get("name", "")
+    lines = [int(item) for item in (body.get("lines") or []) if str(item).isdigit()]
     try:
-        result = await asyncio.to_thread(session().run_file, name)
+        if body.get("build") and not lines:
+            result = await asyncio.to_thread(session().build_only, workspace.read(name), name)
+        else:
+            result = await asyncio.to_thread(session().run_file, name, lines)
         return web.json_response(result)
     except OsLabError as exc:
         return web.json_response({"error": str(exc)}, status=400)

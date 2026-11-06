@@ -10,14 +10,15 @@ from .. import config
 from ..core.errors import OsLabError
 
 SEGMENT = r"^[A-Za-z0-9_.-]{1,64}$"
-KINDS = {".asm", ".inc", ".c", ".h", ".txt", ".md"}
-RUNNABLE = {".asm"}
+KINDS = {".asm", ".inc", ".c", ".h", ".toml", ".txt", ".md"}
+RUNNABLE = {".asm", ".c"}
 
 TEMPLATES = {
     ".asm": "bits 16\norg 0x7c00\n\n    hlt\n\ntimes 510-($-$$) db 0\ndw 0xaa55\n",
     ".inc": "; 供 %include 使用的片段\n",
     ".c": "/* 预留：C 语言混合开发 */\n",
     ".h": "#pragma once\n",
+    ".toml": '',
     ".txt": "",
     ".md": "",
 }

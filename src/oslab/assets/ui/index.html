@@ -22,6 +22,7 @@
   <button id="step">单步</button>
   <button id="step-over">越过</button>
   <button id="reset">复位</button>
+  <button id="gear" class="mini" title="设置">设置</button>
   <span id="status">待机</span>
 </header>
 
@@ -44,6 +45,31 @@
     <section class="pane"><h2><span>内存</span><button class="mini more" data-open="mem">展开</button></h2><div class="body"><div id="mem" class="mrows"></div></div></section>
   </div>
 </aside>
+
+<div id="templates">
+  <div id="templates-head">
+    <span>从模板新建</span>
+    <span class="grow"></span>
+    <button id="templates-close">关闭</button>
+  </div>
+  <div id="templates-body"></div>
+</div>
+
+<div id="settings">
+  <div id="settings-tabs">
+    <button data-tab="run">启动按钮</button>
+    <button data-tab="qemu">QEMU</button>
+    <span class="grow"></span>
+    <button id="settings-close">关闭</button>
+  </div>
+  <div id="settings-body"></div>
+  <div id="settings-foot">
+    <span id="settings-note">改完重启会话后生效</span>
+    <span class="grow"></span>
+    <button id="settings-reset" class="extra">恢复默认</button>
+    <button id="settings-save" class="primary">保存</button>
+  </div>
+</div>
 
 <div id="detail">
   <div id="detail-tabs">

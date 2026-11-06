@@ -17,7 +17,7 @@ from ..core.arbiter import Arbiter
 from ..core.errors import BackendError, BadTransition, OsLabError
 from ..display.rfb import RfbSource
 from ..display.vnc import VncSource
-from . import build, sourcemap, workspace
+from . import build, linemap, settings, sourcemap, workspace
 from .serial import SerialBuffer
 
 REG_LINE = re.compile(r"^(eip|rip):\s*(?:0x)?([0-9a-fA-F]+)")
@@ -37,6 +37,7 @@ class Session:
         self.cursor = 0
         self.bps = set()
         self.source_map = {}
+        self.line_map = {}
         self.want_run = False
         self.cache = {}
         self.stale = 0.0
@@ -51,13 +52,32 @@ class Session:
             except Exception:
                 pass
 
-    def run_file(self, name):
+    def run_file(self, name, lines=None):
         if not name:
             raise OsLabError("没有选中文件")
         text = workspace.read(name)
-        return self.build_and_boot(text, name)
+        return self.build_and_boot(text, name, lines)
 
-    def build_and_boot(self, text, name=""):
+    def build_only(self, text, name=""):
+        """构建但不启动：按钮设成“只构建”时走这里。"""
+        with self._guard:
+            self.arbiter.to(state.BOOTING, "build")
+            try:
+                built, line_map = build.build(text, name, self.image)
+                self.line_map = line_map or linemap.from_listing(self.image, name)
+                self.file = name
+                self.last_error = ""
+                self.arbiter.to(state.IDLE, "built")
+            except Exception as exc:
+                self.last_error = str(exc) or exc.__class__.__name__
+                try:
+                    self.arbiter.to(state.FAULTED, self.last_error)
+                except BadTransition:
+                    pass
+                raise
+            return {"state": self.arbiter.state, "file": name, "built": True}
+
+    def build_and_boot(self, text, name="", lines=None):
         with self._guard:
             if self.arbiter.state == state.RUNNING:
                 try:
@@ -67,24 +87,43 @@ class Session:
                     pass
             self.arbiter.to(state.BOOTING, "assemble")
             try:
-                build.build(text, name, self.image)
+                built, line_map = build.build(text, name, self.image)
                 self.source_map = sourcemap.load(self.image)
+                self.line_map = line_map or linemap.from_listing(self.image, name)
+                current_lines = self.line_map.get(workspace.safe(name)) or {}
+                if current_lines:      # C 的地址反查也走同一张表
+                    self.source_map = {addr: line for line, addr in current_lines.items()}
                 self._teardown()
-                self.backend = QemuBackend(self.dir, self.image)
+                self.tune = settings.load()
+                self.backend = QemuBackend(self.dir, self.image, self.tune)
                 self.backend.start()
                 if not self._await_ready():
                     raise OsLabError("模拟器未就绪")
                 self.bps.clear()
+                # 红点在构建后才有地址：先写断点，再放行，避免跑过头
+                placed = []
+                for line in lines or []:
+                    addr = linemap.lookup(self.line_map, name, int(line))
+                    if addr:
+                        self.add_breakpoint(addr)
+                        placed.append("%08x" % addr)
                 self.serial = SerialBuffer(None)
                 deadline = time.time() + 2.0
                 while time.time() < deadline and not self.serial.connected:
                     time.sleep(0.02)
                 self.cursor = 0
-                self.backend.cont()
                 self.file = name
-                self.arbiter.to(state.RUNNING, "booted")
+                if self.tune["run"]["pause_at_entry"]:
+                    hit = self.backend.cont()
+                else:
+                    hit = "stopped"       # 停在入口等用户放行
+                if hit == "stopped":
+                    self.arbiter.to(state.STOPPED, "hit")
+                else:
+                    self.arbiter.to(state.RUNNING, "booted")
 
                 self.last_error = ""
+                self.placed_bps = placed
             except Exception as exc:
                 traceback.print_exc()
                 self.last_error = str(exc) or exc.__class__.__name__
@@ -202,6 +241,10 @@ class Session:
     def mem_rows(self, addr, count=256):
         rows = self._need_backend().mem_rows(addr & 0xFFFFFFF0, min(int(count), 1024))
         return {"addr": "%08x" % addr, "rows": rows}
+
+    def line_addr(self, path, line):
+        """Address of a source line from the last build, or 0."""
+        return linemap.lookup(self.line_map, path, int(line))
 
     def disasm_rows(self, addr, count=32, syntax="intel"):
         rows = self._need_backend().disasm_rows(addr, min(int(count), 256), syntax)
