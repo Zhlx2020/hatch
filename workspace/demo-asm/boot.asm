@@ -82,7 +82,7 @@ table:
     db 0, 92, 'z', 'x', 'c', 'v', 'b', 'n', 'm', ',', '.', '/'
     times 128 - ($ - table) db 0
 
-banner:  db "OS LAB - asm boot demo", 13, 10, "Type something, Esc quits.", 13, 10, 0
+banner:  db "hatch - asm boot demo", 13, 10, "Type something, Esc quits.", 13, 10, 0
 parting: db 13, 10, "bye", 13, 10, 0
 
 times 510-($-$$) db 0

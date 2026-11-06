@@ -1,0 +1,7 @@
+aiohttp>=3.9
+Pillow>=10
+pywebview>=4.4
+
+[dev]
+pytest>=8
+websockets>=12

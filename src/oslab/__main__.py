@@ -24,14 +24,14 @@ def instance_taken():
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(prog="oslab")
+    parser = argparse.ArgumentParser(prog="hatch")
     parser.add_argument("--port", type=int, default=config.PORT)
     parser.add_argument("--serve", action="store_true")
     parser.add_argument("--browser", action="store_true")
     args = parser.parse_args(argv)
 
     if instance_taken():
-        print("已有一个 OS Lab 在运行（端口 %d 被占用）" % config.LOCK_PORT)
+        print("已有一个 hatch 在运行（端口 %d 被占用）" % config.LOCK_PORT)
         return 1
 
     lock = socket.socket()
@@ -60,7 +60,7 @@ def main(argv=None):
                 time.sleep(1)
         else:
             import webview
-            webview.create_window("OS Lab", url, width=1400, height=900,
+            webview.create_window("hatch", url, width=1400, height=900,
                                   background_color="#0e1216")
             webview.start()
     finally:

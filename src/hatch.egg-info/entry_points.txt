@@ -1,0 +1,2 @@
+[console_scripts]
+hatch = oslab.__main__:main

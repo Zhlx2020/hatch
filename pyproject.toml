@@ -1,0 +1,57 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hatch"
+version = "0.1.0"
+description = "写、编译、启动、调试、观测都在一起的 16/32 位系统实验台"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "赵良喜", email = "1844066342@qq.com" }]
+keywords = ["osdev", "assembly", "qemu", "gdb", "ide", "bootloader"]
+classifiers = [
+  "Environment :: X11 Applications",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Assembly",
+  "Programming Language :: C",
+  "Topic :: Software Development :: Debuggers",
+  "Topic :: Software Development :: Embedded Systems",
+]
+# 界面壳、串口抓取、VNC 帧都要用；Pillow 给无头渲染和截图用
+dependencies = [
+  "aiohttp>=3.9",
+  "Pillow>=10",
+  "pywebview>=4.4",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8",
+  "websockets>=12",
+]
+
+[project.scripts]
+hatch = "oslab.__main__:main"
+
+[project.urls]
+Homepage = "https://github.com/"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"oslab" = [
+  "assets/ui/**/*",
+  "assets/ui/*",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+norecursedirs = ["e2e", ".work", ".run"]

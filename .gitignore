@@ -1,12 +1,19 @@
+# 运行期产物
 .run/
 .work/
 __pycache__/
 *.pyc
-node_modules/
+.pytest_cache/
+
+# 构建产物
 *.bin
 *.img
 *.img.asm
 *.img.dis
 *.lst
+
+# 前端依赖（界面包已提交，装依赖只为改界面）
+node_modules/
+
+# 跑测试留下的临时工程
 workspace/e2e*/
-*.lst

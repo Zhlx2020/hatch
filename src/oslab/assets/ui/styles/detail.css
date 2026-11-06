@@ -155,7 +155,7 @@
 #settings-foot .grow { flex: 1; }
 #settings-tabs button { padding: 5px 12px; font-size: 13.5px; }
 #settings-tabs button.on { border-color: var(--accent); color: var(--accent); }
-#settings-body { padding: 12px 2px; overflow: auto; }
+#settings-body { padding: 12px 2px; overflow: auto; flex: 1 1 auto; min-height: 0; }
 #settings-body label { display: block; margin-bottom: 12px; font-size: 14px; color: var(--dim); }
 #settings-body label span { display: block; margin-bottom: 4px; }
 #settings-body input[type="text"],

@@ -86,9 +86,10 @@
 #modal .suffix {
   flex: 0 0 auto;
   font-size: 10.5px;
-  color: #0d1114;
-  background: #2f6f52;
-  padding: 1px 6px;
+  color: #06110c;
+  background: #6ac496;
+  padding: 2px 7px;
+  font-weight: 600;
   border-radius: 3px;
   font-family: Consolas, monospace;
 }
