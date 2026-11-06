@@ -1,7 +1,6 @@
 const regsEl = document.getElementById("regs");
 const disasmEl = document.getElementById("disasm");
 const memEl = document.getElementById("mem");
-const serialEl = document.getElementById("serial");
 const bpsEl = document.getElementById("bps");
 const statusEl = document.getElementById("status");
 
@@ -24,21 +23,10 @@ export function render(snap) {
   if (snap.bps) {
     bpsEl.textContent = snap.bps.length ? snap.bps.join("\n") : "无";
   }
-  if (snap.serial) {
-    serialEl.textContent += snap.serial;
-    serialEl.scrollTop = serialEl.scrollHeight;
-  }
+
 }
 
-export async function loadSerial() {
-  const res = await fetch("/api/serial");
-  const data = await res.json();
-  if (data.text) {
-    serialEl.textContent = data.text;
-    serialEl.scrollTop = serialEl.scrollHeight;
-  }
-}
+// 串口不再占用界面：客户机写 COM1 的文本仍由 /api/serial 保留，脚本可用。
+export async function loadSerial() {}
 
-export function clearSerial() {
-  serialEl.textContent = "";
-}
+export function clearSerial() {}

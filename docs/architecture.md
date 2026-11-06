@@ -33,7 +33,7 @@ __main__        入口：serve / window，单实例锁与端口清理
 键盘/鼠标 → ws → display.vnc → QEMU 5901
 QEMU 5901 → display.vnc（原样转发 32bpp）→ ws → 画布（BGRX→RGBA 在客户端）
 按钮 → services.session → core.arbiter → backend.qemu.adapter → gdb 5913
-客户机 COM1 → chardev 5914 → services.serial → 面板（可回放）
+客户机 COM1 → chardev 5914 → services.serial → /api/serial（可回放，界面不显示）
 保存 → services.checker → nasm → 诊断行（编辑器标红）
 组装 → nasm -l → services.sourcemap → 暂停时标记当前源码行
 ```

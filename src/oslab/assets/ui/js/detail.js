@@ -18,6 +18,17 @@ const FLAGS = [
   [11, "OF", "溢出"],
 ];
 
+// 每种宽度对应一套真实寄存器名：eax → ax → ah / al
+const NAMES = {
+  dword: [...GPRS, "eip"],
+  word: ["ax", "cx", "dx", "bx", "sp", "bp", "si", "di", "ip"],
+  hi: ["ah", "ch", "dh", "bh"],
+  lo: ["al", "cl", "dl", "bl"],
+  bits: [...GPRS, "eip"],
+};
+const SOURCE = { hi: GPRS, lo: GPRS, word: [...GPRS, "eip"] };
+const DIGITS = { dword: 8, word: 4, hi: 2, lo: 2 };
+
 let width = "dword";
 let tab = "regs";
 let memAddr = 0;
@@ -71,6 +82,17 @@ function jumpBox(value, apply) {
 }
 
 // registers -----------------------------------------------------------
+function field(value, mode) {
+  if (mode === "word") return { shown: value & 0xFFFF, mask: 0xFFFF, shift: 0 };
+  if (mode === "hi") return { shown: (value >>> 8) & 0xFF, mask: 0xFF00, shift: 8 };
+  return { shown: value & 0xFF, mask: 0xFF, shift: 0 };
+}
+
+function compose(full, part, mode) {
+  const { mask, shift } = field(full, mode);
+  return ((full & ~mask) | ((part << shift) & mask)) >>> 0;
+}
+
 function renderRegs(data) {
   bodyEl.textContent = "";
   const regs = data.regs || {};
@@ -92,46 +114,43 @@ function renderRegs(data) {
   }
   bodyEl.append(bar);
 
-  for (const name of [...GPRS, "eip"]) {
-    const value = regs[name] || 0;
+  const names = NAMES[width];
+  names.forEach((name, index) => {
+    const full = SOURCE[width] ? SOURCE[width][index] : name;
+    const value = regs[full] || 0;
     const row = document.createElement("div");
-    row.className = "reg" + (hex(value, 8) === data.eip ? " here" : "");
+    row.className = "reg" + (name === "eip" || name === "ip" ? " here" : "");
     row.append(cell(name, "name"));
 
     if (width === "bits") {
       for (let bit = 31; bit >= 0; bit -= 1) {
-        const on = (value >>> bit) & 1;
         const b = document.createElement("button");
-        b.className = "bit" + (on ? " on" : "");
+        b.className = "bit" + ((value >>> bit) & 1 ? " on" : "");
         b.textContent = String((value >>> bit) & 1);
         b.title = "第 " + bit + " 位";
-        b.addEventListener("click", () => write(name, value ^ (1 << bit)));
+        b.addEventListener("click", () => write(full, value ^ (1 << bit)));
         row.append(b);
         if (bit % 8 === 0 && bit) row.append(cell(" ", "gap"));
       }
-    } else if (width === "word") {
-      row.append(cell("0x" + hex(value & 0xFFFF, 4), "value"));
-    } else if (width === "hi") {
-      row.append(cell("0x" + hex((value >>> 8) & 0xFF, 2), "value"));
-      row.append(cell("ah/ch/dh/bh", "dim"));
-    } else if (width === "lo") {
-      row.append(cell("0x" + hex(value & 0xFF, 2), "value"));
-      row.append(cell("al/cl/dl/bl", "dim"));
-    } else {
+    } else if (width === "dword") {
       row.append(cell("0x" + hex(value, 8), "value"));
       row.append(cell(signed(value) + "", "dim"));
+    } else {
+      const part = field(value, width);
+      row.append(cell("0x" + hex(part.shown, DIGITS[width]), "value"));
     }
-    row.addEventListener("dblclick", () => editInline(row, name, value));
+    if (width !== "bits") {
+      row.addEventListener("dblclick", () => editInline(row, name, full, value, width));
+    }
     bodyEl.append(row);
-  }
+  });
 
   const flags = document.createElement("div");
   flags.className = "reg flags";
   flags.append(cell("eflags", "name"));
   for (const [bit, name, meaning] of FLAGS) {
-    const on = (regs.eflags >>> bit) & 1;
     const b = document.createElement("button");
-    b.className = "flag" + (on ? " on" : "");
+    b.className = "flag" + ((regs.eflags >>> bit) & 1 ? " on" : "");
     b.textContent = name;
     b.title = name + " " + meaning + "（第 " + bit + " 位）";
     b.addEventListener("click", () => write("eflags", (regs.eflags || 0) ^ (1 << bit)));
@@ -147,24 +166,26 @@ function renderRegs(data) {
   }
   bodyEl.append(segs);
 
-  const note = document.createElement("p");
-  note.className = "dim";
-  note.textContent = "双击数值可写回；位与标志可点。";
-  bodyEl.append(note);
+  note(width === "bits"
+    ? "点方框翻转该位。"
+    : "双击数值可写回；宽度只影响看到与写到的位置。");
 }
 
-function editInline(row, name, value) {
+function editInline(row, name, full, value, mode) {
+  const part = mode === "dword" ? value : field(value, mode).shown;
   row.textContent = "";
   row.append(cell(name, "name"));
   const input = document.createElement("input");
-  input.value = hex(value, 8);
+  input.value = hex(part, DIGITS[mode] || 8);
+  input.spellcheck = false;
   row.append(input);
   input.focus();
   input.select();
   const done = () => {
-    const next = parseInt(input.value.replace(/^0x/i, ""), 16);
-    if (!Number.isNaN(next)) write(name, next);
-    else reload();
+    const typed = parseInt(input.value.replace(/^0x/i, ""), 16);
+    if (Number.isNaN(typed)) return reload();
+    const next = mode === "dword" ? typed : compose(value, typed, mode);
+    write(full, next);
   };
   input.addEventListener("keydown", (ev) => {
     if (ev.key === "Enter") done();
@@ -314,8 +335,7 @@ function note(text) {
 // shell ---------------------------------------------------------------
 async function draw() {
   if (!shown) return;
-  const buttons = tabsEl.querySelectorAll("button");
-  for (const button of buttons) {
+  for (const button of tabsEl.querySelectorAll("button[data-tab]")) {
     button.classList.toggle("on", button.dataset.tab === tab);
   }
   if (tab === "regs") return renderRegs(await api.regs());
@@ -347,15 +367,14 @@ export function close() {
 }
 
 export function install() {
-  for (const button of tabsEl.querySelectorAll("button")) {
-    button.dataset.tab = button.dataset.tab || button.textContent;
-  }
   tabsEl.addEventListener("click", (ev) => {
-    const target = ev.target.closest("button");
-    if (!target) return;
-    open(target.dataset.tab);
+    const target = ev.target.closest("button[data-tab]");
+    if (target) open(target.dataset.tab);
   });
-  closeEl.addEventListener("click", close);
+  closeEl.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    close();
+  });
   box.addEventListener("click", (ev) => {
     if (ev.target === box) close();
   });

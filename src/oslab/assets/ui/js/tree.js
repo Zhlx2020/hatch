@@ -11,7 +11,9 @@ const ICONS = { dir: "▸", file: "·" };
 
 function icon(node, open) {
   if (node.kind === "dir") return open ? "▾" : "▸";
-  return node.ext === ".asm" ? "▤" : "·";
+  if (node.ext === ".asm") return "▤";
+  if (node.ext === ".inc") return "▦";
+  return "·";
 }
 
 export function selected() {
@@ -34,7 +36,7 @@ async function reload() {
 function render(parent, nodes, depth) {
   for (const node of nodes) {
     const row = document.createElement("div");
-    row.className = "row " + node.kind;
+    row.className = "row " + node.kind + (node.ext ? " " + node.ext.slice(1) : "");
     row.dataset.path = node.path;
     row.style.paddingLeft = 6 + depth * 12 + "px";
     row.draggable = true;
