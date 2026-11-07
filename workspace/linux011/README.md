@@ -5,6 +5,8 @@
 `stages` 是两级引导（0 号扇区引导块 → 1–5 扇区 setup），`kernel = 0x0` 是内核加载地址，
 `symbol = "startup_32"` 是 head.s 里的入口——这些开关一改，就能照原样把内核搬到别处。
 
+![真 0.11 的提示符：ls 与 cat](docs/shot-linux011.png)
+
 ## 怎么跑
 
 1. 打开 `init/main.c`，点「运行」。hatch 会用 w64devkit 编内核、拼引导软盘、启 QEMU。
