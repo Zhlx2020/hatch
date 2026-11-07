@@ -44,6 +44,61 @@ def test_manifest_validation(workdir):
         project.load("p", str(root))
 
 
+def _manifest(root, text):
+    (root / "p").mkdir(exist_ok=True)
+    (root / "p" / "oslab.toml").write_text(text, encoding="utf-8")
+
+
+def test_manifest_refuses_typo_and_misplaced_keys(workdir):
+    root = pathlib.Path(workdir)
+    _manifest(root, 'kind = "asm"\nentry = "a.asm"\nsouces = ["b.asm"]\n')
+    with pytest.raises(OsLabError, match="不认识的键 souces"):
+        project.load("p", str(root))
+    _manifest(root, 'kind = "asm"\nentry = "a.asm"\nboot = "boot.asm"\n')
+    with pytest.raises(OsLabError, match="只有 C 工程"):
+        project.load("p", str(root))
+
+
+def test_manifest_entry_must_be_in_sources(workdir):
+    root = pathlib.Path(workdir)
+    (root / "p").mkdir()
+    for name in ("a.c", "b.c", "boot.asm", "kernel.ld"):
+        (root / "p" / name).write_text("", encoding="utf-8")
+    _manifest(root, 'kind = "c"\nentry = "a.c"\nsources = ["b.c"]\n'
+                     'boot = "boot.asm"\nlink = "kernel.ld"\n')
+    with pytest.raises(OsLabError, match="entry 得在 sources 里"):
+        project.load("p", str(root))
+    _manifest(root, 'kind = "c"\nentry = "a.c"\nboot = "boot.asm"\nlink = "kernel.ld"\n')
+    assert project.load("p", str(root))["sources"] == ["p/a.c"]
+
+
+def test_manifest_base_takes_hex_text_and_checks_range(workdir):
+    root = pathlib.Path(workdir)
+    (root / "p").mkdir()
+    (root / "p" / "a.asm").write_text("bits 16\n", encoding="utf-8")
+    _manifest(root, 'kind = "asm"\nentry = "a.asm"\nbase = "0x600"\n')
+    assert project.load("p", str(root))["base"] == 0x600
+    _manifest(root, 'kind = "asm"\nentry = "a.asm"\nbase = 0x9000\n')
+    with pytest.raises(OsLabError, match="0x500 到 0x7C00"):
+        project.load("p", str(root))
+    _manifest(root, 'kind = "asm"\nentry = "a.asm"\nbase = 0x100\n')
+    with pytest.raises(OsLabError, match="0x500 到 0x7C00"):
+        project.load("p", str(root))
+    _manifest(root, 'kind = "asm"\nentry = "a.asm"\nbase = 0x605\n')
+    with pytest.raises(OsLabError, match="16 字节对齐"):
+        project.load("p", str(root))
+    _manifest(root, 'kind = "asm"\nentry = "a.asm"\nbase = "seven"\n')
+    with pytest.raises(OsLabError, match="地址"):
+        project.load("p", str(root))
+
+
+def test_shipped_manifests_still_load(workdir):
+    for name in ("asm-hello", "c-hello"):
+        templates.apply(name, name, str(workdir))
+        plan = project.load(name, str(workdir))
+        assert plan["kind"] in ("asm", "c") and plan["base"] == 0x7C00
+
+
 def test_settings_round_trip(workdir):
     data = settings.save({"run": {"label": "跑", "hint": "说明", "action": "build",
                                   "pause_at_entry": False},

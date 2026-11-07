@@ -14,6 +14,8 @@ from . import workspace
 MANIFEST = "oslab.toml"
 KINDS = ("asm", "c")
 DEFAULT_BASE = 0x7C00
+KEYS = ("kind", "entry", "sources", "boot", "link", "base")
+C_ONLY = ("sources", "boot", "link")
 
 
 def find(path, base=None):
@@ -36,6 +38,20 @@ def _join(directory, name):
     return (directory + "/" + name) if directory else name
 
 
+def _base(raw):
+    value = raw.get("base", DEFAULT_BASE)
+    try:
+        number = value if isinstance(value, int) else int(str(value), 0)
+    except ValueError as exc:
+        raise OsLabError("%s：base 要是个地址，比如 0x7C00" % MANIFEST) from exc
+    if not 0x500 <= number <= DEFAULT_BASE:
+        raise OsLabError("%s：base 得在 0x500 到 0x7C00 之间（现在是 0x%X）"
+                         % (MANIFEST, number))
+    if number % 16:
+        raise OsLabError("%s：base 要 16 字节对齐（现在是 0x%X）" % (MANIFEST, number))
+    return number
+
+
 def load(directory, base=None):
     """Read and validate the manifest; returns a normalised dict."""
     rel = workspace.safe(directory)
@@ -52,6 +68,10 @@ def load(directory, base=None):
     if stale:
         raise OsLabError("%s：不再有 [run]（%s 这几项），按钮文字和入口暂停到运行配置里改"
                          % (MANIFEST, "、".join(stale)))
+    unknown = sorted(key for key in raw if key not in KEYS and key != "run")
+    if unknown:
+        raise OsLabError("%s：不认识的键 %s，能写的是 %s"
+                         % (MANIFEST, "、".join(unknown), " / ".join(KEYS)))
 
     kind = str(raw.get("kind", "")).lower()
     if kind not in KINDS:
@@ -65,16 +85,23 @@ def load(directory, base=None):
         "dir": rel,
         "kind": kind,
         "entry": _join(rel, entry),
-        "base": int(raw.get("base", DEFAULT_BASE)),
+        "base": _base(raw),
         "boot": "",
         "link": "",
         "sources": [],
     }
+    for key in C_ONLY:
+        if raw.get(key) and kind != "c":
+            raise OsLabError("%s：%s 只有 C 工程用得上（kind = \"c\"）" % (MANIFEST, key))
     if kind == "c":
         plan["boot"] = _join(rel, _string(raw, "boot"))
         plan["link"] = _join(rel, _string(raw, "link"))
         sources = raw.get("sources") or [entry]
+        if not isinstance(sources, list):
+            raise OsLabError("%s：sources 要是个列表，比如 [\"src/a.c\", \"src/b.c\"]" % MANIFEST)
         plan["sources"] = [_join(rel, str(item)) for item in sources]
+        if plan["entry"] not in plan["sources"]:
+            raise OsLabError("%s：entry 得在 sources 里，否则链接不到 _start" % MANIFEST)
 
     for key in [plan["entry"], plan["boot"], plan["link"], *plan["sources"]]:
         if not key:
