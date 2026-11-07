@@ -31,15 +31,27 @@ async function guarded(fn) {
   }
 }
 
+let lastLive = false;
+let lastHint = "";
+
 async function refresh() {
   const snap = await api.state();
+  // 只有启动中/运行中算“活”，中断之后降档
+  lastLive = snap.state === "running" || snap.state === "booting";
   panels.render(snap);
-  if (panels.serialOn()) panels.setSerial((await api.serial()).text || "");
+  // 串口当屏幕时，只有这一拍真的带了新字符才多打一个请求
+  if (panels.serialOn() && snap.serial) panels.setSerial((await api.serial()).text || "");
   const live = snap.state === "running" || snap.state === "stopped";
-  if (snap.state === "booting") hint.show("正在加载中…", true);
-  else if (snap.state === "faulted") hint.show(snap.error || "启动失败", true);
-  else if (!live) hint.show("待机，点「运行」启动", true);
-  else hint.hide();
+  // 提示条按状态变化才动，不然每拍都写一次 class 和文本，浏览器跟着重排
+  const want = snap.state === "booting" ? "正在加载中…"
+    : snap.state === "faulted" ? (snap.error || "启动失败")
+      : live ? "" : "待机，点「运行」启动";
+  const key = snap.state + "|" + want;
+  if (key !== lastHint) {
+    lastHint = key;
+    if (want) hint.show(want, true);
+    else hint.hide();
+  }
   const own = editor.file();
   if (snap.state === "stopped" && snap.line && own && snap.file === own) {
     editor.markLine(snap.line);
@@ -315,7 +327,30 @@ detail.install();
 input.install();
 screen.connect();
 panels.loadSerial();
-setInterval(refresh, 400);
+// 轮询分档：跑起来/启动中要跟手，停住了慢一拍无所谓，待机再慢些；
+// 标签页在后台就干脆不跑，切回来立刻补一次。
+let tick = null;
+function cadence() {
+  if (document.hidden) return 0;
+  return lastLive ? 400 : 1500;
+}
+function schedule() {
+  clearTimeout(tick);
+  const wait = cadence();
+  if (wait) tick = setTimeout(loop, wait);
+}
+async function loop() {
+  try {
+    await refresh();
+  } finally {
+    schedule();
+  }
+}
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) refresh().finally(schedule);
+  schedule();
+});
+schedule();
 
 tree.install((path, text) => editor.show(path, text)).then(() => {
   const first = [...document.querySelectorAll("#tree .row.file")]

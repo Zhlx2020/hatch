@@ -238,9 +238,12 @@ async function write(name, value) {
 
 // memory --------------------------------------------------------------
 async function renderMem() {
-  begin();
   const snap = await api.state();
   const regs = (await api.regs()).regs || {};
+  const stamp = [memAddr, snap.eip, snap.state, JSON.stringify(regs)].join("|");
+  if (stamp === seen.mem) return;
+  seen.mem = stamp;
+  begin();
   const follow = (name) => () => {
     memAddr = num(regs[name]);
     renderMem();
@@ -302,9 +305,12 @@ async function renderMem() {
 
 // disassembly ---------------------------------------------------------
 async function renderDisasm() {
-  begin();
   const regs = (await api.regs()).regs || {};
   const eip = num(regs.eip);
+  const stamp = [disAddr, regs.eip].join("|");
+  if (stamp === seen.disasm) return;
+  seen.disasm = stamp;
+  begin();
   const { wrap } = jumpBox(disAddr || eip, (next) => {
     disAddr = next;
     renderDisasm();
@@ -549,12 +555,21 @@ function note(text) {
 }
 
 // shell ---------------------------------------------------------------
+// 抽屉每 700 毫秒自己刷一次。值没变就别重建那一大坨节点（内存栏一条就是一堆 span）
+const seen = { regs: "", mem: "", disasm: "" };
+
 async function draw() {
   if (!shown) return;
   for (const button of tabsEl.querySelectorAll("button[data-tab]")) {
     button.classList.toggle("on", button.dataset.tab === tab);
   }
-  if (tab === "regs") return renderRegs(await api.regs());
+  if (tab === "regs") {
+    const data = await api.regs();
+    const stamp = [data.eip, JSON.stringify(data.regs)].join("|");
+    if (stamp === seen.regs) return undefined;
+    seen.regs = stamp;
+    return renderRegs(data);
+  }
   if (tab === "mem") return renderMem();
   if (tab === "disk") return renderDisk();
   if (tab === "elf") return renderElf();
@@ -562,6 +577,7 @@ async function draw() {
 }
 
 async function reload() {
+  if (document.hidden) return;
   try {
     await draw();
   } catch (err) {

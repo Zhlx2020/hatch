@@ -22,6 +22,15 @@ from . import build, linemap, settings, sourcemap, workspace
 from .serial import SerialBuffer
 
 REG_LINE = re.compile(r"^(eip|rip):\s*(?:0x)?([0-9a-fA-F]+)")
+ANY_REG = re.compile(r"^([a-z]+):\s*(?:0x)?([0-9a-fA-F]+)", re.M)
+
+
+def parse_reg(text, name):
+    """从一份 registers() 输出里取某个名字的值，取不到给 0。"""
+    for found, value in ANY_REG.findall(text or ""):
+        if found.lower() == name:
+            return value
+    return "0"
 
 
 class Session:
@@ -44,6 +53,8 @@ class Session:
         self.cache = {}
         self.held = False
         self.stale = 0.0
+        self.snaplog = bool(os.environ.get("HATCH_SNAPLOG"))
+        self.log_fh = None
         self.filling = False
 
     # lifecycle ------------------------------------------------------
@@ -312,12 +323,10 @@ class Session:
             live = state.RUNNING       # 临时按停补读期间，对外仍算运行中
         if live in (state.RUNNING, state.BOOTING):
             text, cursor = self.serial.since(self.cursor) if self.serial else ("", 0)
-            try:
-                with open(".run/ser.log", "a") as fh:
-                    fh.write("%r cur=%s new=%s buf=%s\n" % (text[:20], self.cursor, cursor,
-                             len(self.serial.tail()) if self.serial else -1))
-            except OSError:
-                pass
+            if self.snaplog:
+                self._log("%r cur=%s new=%s buf=%s" % (
+                    text[:20], self.cursor, cursor,
+                    len(self.serial.tail()) if self.serial else -1))
             self.cursor = cursor
             # 运行中不碰 gdb：画面和串口照常，寄存器停在上一帧的值
             return dict(self.cache, state=live, file=self.file,
@@ -330,12 +339,14 @@ class Session:
             data.pop(key, None)
         try:
             with self._keep_running():
-                eip = self.eip()
+                regs = self.backend.registers()          # 一次读全，下面都从这份里取
+                eip = int(parse_reg(regs, "eip"), 16)
                 data["eip"] = "%08x" % eip
-                data["regs"] = self.backend.registers()
+                data["regs"] = regs
                 data["disasm"] = self.backend.disassemble(eip, 8)
                 data["mem"] = self.backend.hexdump(eip, 128)
-                data["stack"] = self.backend.dump_stack(self._reg("esp"))
+                esp = int(parse_reg(regs, "esp"), 16)
+                data["stack"] = self.backend.dump_stack(esp)
                 data["line"] = sourcemap.line_at(self.source_map, eip)
         except Exception as exc:            # a timeout must not lose the view
             data["error"] = "读取超时：%s" % exc
@@ -349,6 +360,14 @@ class Session:
         self.cache = {k: v for k, v in data.items()
                       if k not in ("serial", "state", "error")}
         return data
+
+    def _log(self, line):
+        try:
+            if self.log_fh is None:
+                self.log_fh = open(".run/ser.log", "a", buffering=1)
+            self.log_fh.write(line + "\n")
+        except OSError:
+            self.log_fh = None
 
     def eip(self):
         return int(self._reg("eip"), 16)

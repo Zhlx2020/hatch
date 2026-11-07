@@ -119,16 +119,39 @@ function drawMem(text) {
   }
 }
 
+// 上一次画的内容。轮询每 0.4～1.2 秒来一次，值没变就别拆 DOM
+const last = { regs: null, disasm: null, mem: null, bps: null, status: null };
+
 export function render(snap) {
   if (!snap) return;
   const label = LABELS[snap.state] || snap.state || "未知";
-  statusEl.textContent = snap.error ? `${label}：${snap.error}` : label;
-  statusEl.classList.toggle("bad", Boolean(snap.error) || snap.state === "faulted");
+  const text = snap.error ? `${label}：${snap.error}` : label;
+  if (text !== last.status) {
+    last.status = text;
+    statusEl.textContent = text;
+    statusEl.classList.toggle("bad", Boolean(snap.error) || snap.state === "faulted");
+  }
   if (snap.serial) feedSerial(snap.serial);
-  if (snap.regs !== undefined) drawRegs(snap.regs);
-  if (snap.disasm !== undefined) drawDisasm(snap.disasm, snap);
-  if (snap.mem !== undefined) drawMem(snap.mem);
-  if (snap.bps) drawBps(snap.bps);
+  if (snap.regs !== undefined && snap.regs !== last.regs) {
+    last.regs = snap.regs;
+    drawRegs(snap.regs);
+  }
+  // 反汇编的显示还跟当前 eip（高亮行）和断点（圆点）有关，一起当键
+  const dis = snap.disasm === undefined ? null
+    : [snap.disasm, snap.eip, (snap.bps || []).join(",")].join("|");
+  if (dis !== null && dis !== last.disasm) {
+    last.disasm = dis;
+    drawDisasm(snap.disasm, snap);
+  }
+  if (snap.mem !== undefined && snap.mem !== last.mem) {
+    last.mem = snap.mem;
+    drawMem(snap.mem);
+  }
+  const bps = (snap.bps || []).join(",");
+  if (bps !== last.bps) {
+    last.bps = bps;
+    drawBps(snap.bps);
+  }
 }
 
 // 只有在串口模板下才把串口当屏幕：其余时候文本仍留在 /api/serial 给脚本用。
