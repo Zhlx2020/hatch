@@ -109,6 +109,9 @@ class Session:
                     self.source_map = {addr: line for line, addr in current_lines.items()}
                 self._teardown()
                 self.tune = settings.with_project(settings.load(), name)
+                for disk in self.tune["qemu"].get("disks") or []:
+                    if not os.path.isfile(workspace.full(disk["path"])):
+                        raise OsLabError("附加盘不存在：%s" % disk["path"])
                 self.backend = QemuBackend(self.dir, self.image, self.tune)
                 self.backend.start()
                 self.backend.on_stop = self._on_stop
@@ -175,6 +178,7 @@ class Session:
         if self.serial:
             self.serial.close()
             self.serial = None
+        self.cache = {}          # 上一台机器的寄存器和反汇编不许带到下一个程序
         wait_free()
 
     def _await_ready(self, timeout=8.0):

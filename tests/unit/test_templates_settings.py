@@ -54,7 +54,7 @@ def test_manifest_refuses_typo_and_misplaced_keys(workdir):
     _manifest(root, 'kind = "asm"\nentry = "a.asm"\nsouces = ["b.asm"]\n')
     with pytest.raises(OsLabError, match="不认识的键 souces"):
         project.load("p", str(root))
-    _manifest(root, 'kind = "asm"\nentry = "a.asm"\nboot = "boot.asm"\n')
+    _manifest(root, 'kind = "asm"\nentry = "a.asm"\nlink = "k.ld"\n')
     with pytest.raises(OsLabError, match="只有 C 工程"):
         project.load("p", str(root))
 
@@ -233,3 +233,75 @@ def test_leftover_run_block_is_rejected(workdir):
 def test_extra_survives_round_trip(workdir):
     settings.save({'qemu': {'extra': ['-fsdev', 'local,path=x']}}, str(workdir))
     assert settings.load(str(workdir))['qemu']['extra'] == ['-fsdev=local,path=x']
+
+
+def _project(root, manifest, files=()):
+    (root / "p").mkdir(exist_ok=True)
+    for name in files:
+        (root / "p" / name).write_text("", encoding="utf-8")
+    (root / "p" / "oslab.toml").write_text(manifest, encoding="utf-8")
+    return root
+
+
+def test_manifest_stages_and_kernel_defaults(workdir):
+    root = pathlib.Path(workdir)
+    _project(root, 'kind = "c"\nentry = "a.c"\nboot = "b.asm"\nlink = "k.ld"\n',
+             ("a.c", "b.asm", "k.ld"))
+    plan = project.load("p", str(root))
+    assert plan["kernel"] == 0x10000 and plan["symbol"] == "_start"
+    assert [item["addr"] for item in plan["stages"]] == [0x7C00]
+
+
+def test_manifest_stages_chain_and_conflict(workdir):
+    root = pathlib.Path(workdir)
+    text = ('kind = "c"\nentry = "a.c"\nlink = "k.ld"\n'
+            'stages = [{ path = "b.asm" }, { path = "s.asm", addr = 0x9000 }]\n')
+    _project(root, text, ("a.c", "b.asm", "s.asm", "k.ld"))
+    plan = project.load("p", str(root))
+    assert [item["path"] for item in plan["stages"]] == ["p/b.asm", "p/s.asm"]
+    assert plan["stages"][1]["addr"] == 0x9000
+    _project(root, text + 'boot = "b.asm"\n', ("a.c", "b.asm", "s.asm", "k.ld"))
+    with pytest.raises(OsLabError, match="只能写一个"):
+        project.load("p", str(root))
+
+
+def test_manifest_kernel_must_be_sane(workdir):
+    root = pathlib.Path(workdir)
+    _project(root, 'kind = "c"\nentry = "a.c"\nboot = "b.asm"\nlink = "k.ld"\n'
+                   'kernel = 0x20005\n', ("a.c", "b.asm", "k.ld"))
+    with pytest.raises(OsLabError, match="16 字节对齐"):
+        project.load("p", str(root))
+    _project(root, 'kind = "c"\nentry = "a.c"\nboot = "b.asm"\nlink = "k.ld"\n'
+                   'kernel = 0\n', ("a.c", "b.asm", "k.ld"))
+    assert project.load("p", str(root))["kernel"] == 0
+
+
+def test_build_command_project_needs_entry_only(workdir):
+    root = pathlib.Path(workdir)
+    _project(root, 'kind = "c"\nentry = "boot.asm"\nbuild = ["make"]\n'
+                   'image = "out/boot.img"\n', ("boot.asm",))
+    plan = project.load("p", str(root))
+    assert plan["build"] == ["make"] and plan["image"] == "p/out/boot.img"
+    assert plan["stages"] == []
+
+
+def test_settings_memory_and_disks(workdir):
+    data = settings.save({"qemu": {"memory": 16,
+                                    "disks": [{"path": "root.img", "iface": "floppy",
+                                                "index": 1}]}}, str(workdir))
+    assert data["qemu"]["memory"] == 16
+    assert data["qemu"]["disks"][0]["index"] == 1
+    assert "disks" in pathlib.Path(workdir, "settings.toml").read_text(encoding="utf-8")
+    with pytest.raises(OsLabError, match="2 到 1024"):
+        settings.save({"qemu": {"memory": 4096}}, str(workdir))
+    with pytest.raises(OsLabError, match="接法"):
+        settings.save({"qemu": {"disks": [{"path": "r.img", "iface": "usb"}]}},
+                      str(workdir))
+
+
+def test_memory_overrides_the_template(workdir):
+    args = settings.profile_args("floppy", "img", 16)
+    assert args[args.index("-m") + 1] == "16"
+    assert args.count("-m") == 1
+    plain = settings.profile_args("floppy", "img")
+    assert plain[plain.index("-m") + 1] == "32"

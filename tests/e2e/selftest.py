@@ -210,6 +210,43 @@ async def main():
         check("查不到时给原因", status == 200 and not missing.get("addr")
               and missing.get("reason"), str(missing))
 
+        # 自备引导链与自己的构建命令 -------------------------------------
+        status, chain = await post(session, "/api/template",
+                                   {"name": "chain", "dir": STAMP + "-ch"})
+        check("建两级引导工程", status == 200, str(chain)[:80])
+        status, chain_run = await post(session, "/api/run", {"name": STAMP + "-ch/boot.asm"})
+        check("两级引导能起来", status == 200, str(chain_run)[:80])
+        await asyncio.sleep(0.6)
+        await post(session, "/api/pause")
+        _, ch_state = await get(session, "/api/state")
+        check("第二级跑在 0x9000", ch_state.get("eip", "").startswith("00009"), str(ch_state)[:80])
+
+        async with session.put(BASE + "/api/file/" + STAMP + "-ch/oslab.toml",
+                               json={"text": 'kind = "asm"\nentry = "boot.asm"\n'
+                                             'boot = "boot.asm"\n'
+                                             'stages = [{ path = "boot.asm" }]\n'}) as resp:
+            check("写坏清单", resp.status == 200)
+        status, conflict = await post(session, "/api/run", {"name": STAMP + "-ch/boot.asm"})
+        check("boot 与 stages 同写被拒", status == 400
+              and "只能写一个" in (conflict.get("error") or ""), str(conflict)[:80])
+
+        status, scripted = await post(session, "/api/run", {"name": "scripted/boot.asm"})
+        check("自己的构建命令能跑", status == 200, str(scripted)[:80])
+
+        status, kept = await put(session, "/api/settings",
+                                 {"qemu": {"memory": 16,
+                                           "disks": [{"path": "root.img",
+                                                      "iface": "floppy", "index": 1}]}})
+        check("内存和附加盘存得住", status == 200 and kept["qemu"]["memory"] == 16
+              and kept["qemu"]["disks"][0]["index"] == 1, str(kept)[:100])
+        status, gone = await post(session, "/api/run", {"name": "boot/main.asm"})
+        check("盘不在时说清是哪个", status == 400 and "附加盘不存在" in (gone.get("error") or ""),
+              str(gone)[:80])
+        await put(session, "/api/settings", {"qemu": {"memory": 0, "disks": []}})
+        # 回到 C 工程，后面的布局 / 行号检查才有东西看
+        await post(session, "/api/run", {"name": STAMP + "-c/src/kmain.c", "lines": [9]})
+        await asyncio.sleep(1.0)
+
         # 磁盘布局与 ELF 结构 -------------------------------------------
         status, layout = await get(session, "/api/disk")
         kinds = [row.get("kind") for row in layout.get("regions") or []]
@@ -302,6 +339,8 @@ async def main():
             check("删除目录", resp.status == 200)
         async with session.delete(BASE + "/api/node?path=" + STAMP + "-c") as resp:
             check("删除模板工程", resp.status == 200)
+        async with session.delete(BASE + "/api/node?path=" + STAMP + "-ch") as resp:
+            check("删除引导链工程", resp.status == 200)
 
     failures = results.count(False)
     print("\n%d/%d 通过" % (len(results) - failures, len(results)))

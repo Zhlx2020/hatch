@@ -1,0 +1,19 @@
+# 用项目自己的构建命令：内置流水线整条让开，只收下面声明的产物。
+#
+# 适合移植现成的内核（比如带 Makefile 的）。写了 build 之后，stages / link /
+# sources / kernel 都不再参与，编译、链接、镜像布局全归命令自己管。
+#
+# build 是一条命令（或 argv 列表），在工程目录里执行。PATH 上已经放好了本机的
+# nasm、gcc、ld、objcopy，直接写 nasm 就行。
+build = ["python make.py"]
+
+# image 是构建必须产出的镜像，相对本文件。必须是整扇区、第一个扇区带 AA55、
+# 不超过一张软盘。
+image = "out/boot.img"
+
+# 想让行号映射、符号、ELF 视图接得上，再产出这两个并在这里声明：
+# elf = "out/kernel.elf"
+# map = "out/kernel.map"
+
+kind = "c"
+entry = "boot.asm"

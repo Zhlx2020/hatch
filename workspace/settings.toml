@@ -8,3 +8,5 @@ pause_at_entry = true
 [qemu]
 profile = "floppy"
 extra = []
+memory = 0
+disks = []

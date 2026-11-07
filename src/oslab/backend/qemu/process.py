@@ -15,11 +15,13 @@ ARGS = [
 
 
 def command(image, tune=None):
-    """完整命令行：托管项 + 模板 + 附加参数，最后固定加 -S。"""
+    """完整命令行：托管项 + 模板 + 附加盘 + 附加参数，最后固定加 -S。"""
     tune = tune or settings.load()
     args = [config.QEMU]
     args += ARGS
-    args += settings.profile_args(tune["qemu"]["profile"], image)
+    args += settings.profile_args(tune["qemu"]["profile"], image,
+                                  (tune["qemu"].get("memory") or 0))
+    args += settings.disk_args(tune["qemu"].get("disks"), image)
     args += tune["qemu"]["extra"]
     args.append("-S")          # 一定从复位停住，避免断点被抢跑
     return args

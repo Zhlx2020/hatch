@@ -46,8 +46,14 @@ def build(text, path, image, base=None):
     if directory:
         plan = project.load(directory, base)
         text_for_entry = text if plan["entry"] == workspace.safe(path) else None
+        if plan["build"]:            # 项目自己会构建，编辑器里的改动先落盘
+            if text_for_entry is not None:
+                workspace.write(plan["entry"], text_for_entry, base)
+            return cbuild.run_command(plan, image, base)
         if plan["kind"] == "c":
             return cbuild.compile_project(plan, image, base, text=text_for_entry)
+        if plan["stages"]:
+            return cbuild.assemble_chain(plan, image, base)
         handler = HANDLERS.get(".asm")
         source = text_for_entry
         if source is None:

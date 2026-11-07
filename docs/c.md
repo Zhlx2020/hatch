@@ -4,9 +4,13 @@
 
 C 要 32 位平坦寻址，引导扇区是 16 位实模式。所以每个 C 工程都由三件东西组成：
 
-- `boot/boot.asm`：512 字节引导扇区，`int 13h` 把内核读进 0x10000，开 A20、装 GDT、进保护模式、
-  远跳过去。结尾必须是 `0xAA55`
-- `boot/kernel.ld`：把入口钉在 0x10000 的链接脚本
+- `boot/boot.asm`：512 字节引导扇区，逐扇区把内核读到 `kernel` 指定的地址，开 A20、装 GDT、
+  进保护模式、远跳过去。结尾必须是 `0xAA55`
+- `boot/kernel.ld`：把内核钉在 `kernel`（默认 0x10000）的链接脚本；也可以只写
+  `__KERNEL_BASE__` 让构建来代入
+
+引导链可以多级：`stages` 里第二个及以后的文件按整扇区摆在后面，512 字节装不下的东西放去那里。
+仓库自带的 stub 已经按扇区循环读盘，不赌 BIOS 的批量读。
 - `src/*.c`：内核本体，只有 `_start`，不链 libc
 
 `oslab.toml` 把这三件事的关系写清楚，`services/project.py` 负责校验。
@@ -16,13 +20,15 @@ C 要 32 位平坦寻址，引导扇区是 16 位实模式。所以每个 C 工�
 `services/cbuild.py`：
 
 1. `gcc -m32 -ffreestanding -fno-pic -fno-stack-protector -fno-asynchronous-unwind-tables -O0 -g -c`
-2. `ld -m i386pe --disable-reloc-section -T kernel.ld -e _start`
-3. `objcopy -O binary --strip-debug -j .text -j .rdata -j .rodata -j .data`
-4. 引导扇区 + 内核 + 零填充 = 1.44 MB 镜像
+   （清单里的 `cflags` 追加在后面，`includes` 追加 `-I`）
+2. `ld -m i386pe --disable-reloc-section -T <link> -e <symbol>`（`symbol` 默认 `_start`）
+3. `objcopy -O binary --strip-all`——不挑节，自定义节不会被丢掉
+4. 引导链按顺序摆、内核摆在最后一个整扇区之后、零填充到 1.44 MB
 
-这套 binutils 只有 PE 目标，所以用 `objcopy` 取段而不是 `--oformat binary`：PE 的
-`.reloc` 和调试节会让后者报「file truncated」。PE 还会把 `.rodata` 收进 `.rdata`，
-两个名字都要取，否则字符串会凭空消失。`-disable-reloc-section` 顺带消掉了基址重定位警告。
+汇编源（`.asm` / `.s`）先走 `nasm -f elf32`，再和 `.c` 一起参与链接。
+
+这套 binutils 只有 PE 目标，所以用 `objcopy` 转二进制而不是 `--oformat binary`：PE 的
+`.reloc` 和调试节会让后者报「file truncated」。`-disable-reloc-section` 顺带消掉了基址重定位警告。
 
 `-O0` 是刻意的：优化会把源码行合并、把变量搬进寄存器，行断点随之漂移。要性能自己加 `-O2`，
 代价是断点可能跳行。
@@ -37,7 +43,9 @@ C 要 32 位平坦寻址，引导扇区是 16 位实模式。所以每个 C 工�
 
 ## 限制
 
-- 内核最大 15.5 KB（引导扇区只读 32 扇区），超了会直接报错
+- 上限只剩磁盘：1.44 MB（2880 扇区），整张镜像装不下才报错。读得动多少由引导链负责，
+  用仓库自带 stub 时它按内核实际扇区数循环读
+- 内核地址写在 `kernel` 和链接脚本里，不做重定位；想让内核落在别处就改这两个地方
 - 没有分页、没有中断处理、没有 libc；要这些得自己写，模板只到 VGA 文本和键盘轮询
 
 ## 工具链

@@ -45,6 +45,11 @@ export function paint() {
   document.getElementById("run-label").value = data.run.label;
   document.getElementById("run-hint").value = data.run.hint;
   document.getElementById("run-extra").value = (data.qemu.extra || []).join(" ");
+  const disks = (data.qemu.disks || []).map((one) =>
+    esc(one.path) + " → " + esc(one.iface) + (one.index ? " " + one.index : ""));
+  document.getElementById("run-disks").innerHTML = (data.qemu.memory ? "内存 " + data.qemu.memory + " MB　" : "")
+    + (disks.length ? "附加盘 " + disks.join("、") : "")
+    + (disks.length || data.qemu.memory ? "（在 settings.toml 里改）" : "");
   paintFacts();
 }
 

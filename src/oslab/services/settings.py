@@ -80,6 +80,8 @@ DEFAULT_PROFILE = "floppy"
 QEMU = {
     "profile": DEFAULT_PROFILE,
     "extra": [],
+    "disks": [],          # 额外的盘：[{ path = "root.img", iface = "floppy", index = 1 }]
+    "memory": 0,          # 0 表示用模板给的内存
 }
 # 允许放进 extra 的参数：都是独立开关，交给 QEMU 即可
 ALLOWED = {
@@ -172,10 +174,21 @@ def catalogue():
             for key, item in PROFILES.items()]
 
 
-def profile_args(name, image="%s"):
+def profile_args(name, image="%s", memory=0):
     """模板参数，带上显示方式：串口档关画面，其余走本地 VNC。"""
     item = PROFILES.get(name) or PROFILES[DEFAULT_PROFILE]
-    args = [arg % image if "%s" in arg else arg for arg in item["args"]]
+    args = []
+    skip = False
+    for arg in item["args"]:
+        if skip:
+            skip = False
+            continue
+        if memory and arg == "-m":
+            skip = True
+            continue
+        args.append(arg % image if "%s" in arg else arg)
+    if memory:
+        args += ["-m", str(memory)]
     if item["screen"] == "vnc":
         args += ["-display", "vnc=127.0.0.1:%d" % config.VNC_HOST_PORT]
     else:
@@ -202,12 +215,65 @@ def _clean_run(raw):
             "pause_at_entry": pause}
 
 
+IFACES = ("floppy", "ide", "cdrom")
+
+
 def _clean_qemu(raw):
     profile = raw.get("profile", QEMU["profile"])
     if profile not in PROFILES:
         raise OsLabError("没有这个模板：%s" % profile)
     extra = raw.get("extra", [])
-    return {"profile": profile, "extra": check_extra(extra) if isinstance(extra, list) else []}
+    memory = raw.get("memory", QEMU["memory"])
+    try:
+        memory = int(memory)
+    except (TypeError, ValueError) as exc:
+        raise OsLabError("内存要写兆字节数，比如 16") from exc
+    if memory and not 2 <= memory <= 1024:
+        raise OsLabError("内存得在 2 到 1024 MB 之间")
+    return {"profile": profile, "extra": check_extra(extra) if isinstance(extra, list) else [],
+            "disks": _clean_disks(raw.get("disks", [])), "memory": memory}
+
+
+def _clean_disks(items):
+    """额外的盘：路径 + 怎么挂 + 第几个。"
+    """
+    if not isinstance(items, list):
+        raise OsLabError("disks 要写成列表")
+    out = []
+    for item in items[:3]:
+        if isinstance(item, str):
+            item = {"path": item}
+        if not isinstance(item, dict):
+            raise OsLabError("disks 每项是路径，或 { path = ..., iface = ... }")
+        path = str(item.get("path") or "").strip().replace("\\", "/").lstrip("/")
+        if not path:
+            raise OsLabError("disks 里有一项没写路径")
+        iface = str(item.get("iface") or "floppy")
+        if iface not in IFACES:
+            raise OsLabError("盘的接法只能是 %s" % " / ".join(IFACES))
+        index = item.get("index", 1)
+        try:
+            index = int(index)
+        except (TypeError, ValueError) as exc:
+            raise OsLabError("index 要写数字") from exc
+        if not 0 <= index <= 3:
+            raise OsLabError("index 得在 0 到 3 之间")
+        out.append({"path": path, "iface": iface, "index": index})
+    return out
+
+
+def disk_args(disks, image="%s"):
+    """额外盘的参数；被模板占掉的第一个位置不重复挂。"
+    """
+    args = []
+    for item in disks or []:
+        full = workspace.full(item["path"]) if not os.path.isabs(item["path"]) else item["path"]
+        if item["iface"] == "cdrom":
+            args += ["-cdrom", full]
+            continue
+        args += ["-drive", "file=%s,if=%s,index=%d,format=raw"
+                 % (full, item["iface"], item["index"])]
+    return args
 
 
 def load(base=None):
@@ -264,7 +330,16 @@ def write(data, base=None):
              "",
              "[qemu]",
              'profile = "%s"' % qemu["profile"],
-             "extra = [%s]" % ", ".join('"%s"' % _esc(one) for one in qemu["extra"])]
+             "extra = [%s]" % ", ".join('"%s"' % _esc(one) for one in qemu["extra"]),
+             "memory = %d" % qemu.get("memory", 0)]
+    disks = qemu.get("disks") or []
+    if disks:
+        rows = ", ".join('{ path = "%s", iface = "%s", index = %d }'
+                         % (_esc(disk["path"]), disk["iface"], disk["index"])
+                         for disk in disks)
+        lines.append("disks = [%s]" % rows)
+    else:
+        lines.append("disks = []")
     path = _path(base)
     with open(path, "w", newline="\n", encoding="utf-8") as fh:
         fh.write("\n".join(lines) + "\n")

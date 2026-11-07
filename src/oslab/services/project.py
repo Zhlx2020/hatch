@@ -14,8 +14,15 @@ from . import workspace
 MANIFEST = "oslab.toml"
 KINDS = ("asm", "c")
 DEFAULT_BASE = 0x7C00
-KEYS = ("kind", "entry", "sources", "boot", "link", "base")
-C_ONLY = ("sources", "boot", "link")
+DEFAULT_KERNEL = 0x10000
+DEFAULT_SYMBOL = "_start"
+KERNEL_MAX = 0x100000
+KEYS = ("kind", "entry", "sources", "boot", "stages", "link", "kernel", "base",
+        "symbol", "cflags", "ldflags", "includes", "build", "image", "elf", "map")
+C_ONLY = ("sources", "link", "kernel", "symbol", "cflags",
+          "ldflags", "includes")
+ASM_OK = (".asm", ".s")
+RUNNABLE = (".asm", ".c", ".s")
 
 
 def find(path, base=None):
@@ -38,18 +45,57 @@ def _join(directory, name):
     return (directory + "/" + name) if directory else name
 
 
-def _base(raw):
-    value = raw.get("base", DEFAULT_BASE)
+def _number(raw, key, default, low, high, align=1):
+    value = raw.get(key, default)
     try:
         number = value if isinstance(value, int) else int(str(value), 0)
     except ValueError as exc:
-        raise OsLabError("%s：base 要是个地址，比如 0x7C00" % MANIFEST) from exc
-    if not 0x500 <= number <= DEFAULT_BASE:
-        raise OsLabError("%s：base 得在 0x500 到 0x7C00 之间（现在是 0x%X）"
-                         % (MANIFEST, number))
-    if number % 16:
-        raise OsLabError("%s：base 要 16 字节对齐（现在是 0x%X）" % (MANIFEST, number))
+        raise OsLabError("%s：%s 要是个地址，比如 0x%X" % (MANIFEST, key, default)) from exc
+    if not low <= number <= high:
+        raise OsLabError("%s：%s 得在 0x%X 到 0x%X 之间（现在是 0x%X）"
+                         % (MANIFEST, key, low, high, number))
+    if number % align:
+        raise OsLabError("%s：%s 要 %d 字节对齐（现在是 0x%X）"
+                         % (MANIFEST, key, align, number))
     return number
+
+
+def _list(raw, key):
+    value = raw.get(key)
+    if value is None:
+        return []
+    if not isinstance(value, list) or not all(isinstance(item, str) and item.strip()
+                                              for item in value):
+        raise OsLabError("%s：%s 要是个字符串列表" % (MANIFEST, key))
+    return [item.strip() for item in value]
+
+
+def _stages(raw, rel):
+    """`stages` / `boot` → 依次落盘的引导链，第一个是引导扇区。"""
+    plain = raw.get("stages")
+    if plain is not None and not isinstance(plain, list):
+        raise OsLabError("%s：stages 要写成列表" % MANIFEST)
+    plain = list(plain or [])
+    single = raw.get("boot")
+    if plain and single:
+        raise OsLabError("%s：boot 和 stages 只能写一个，多级引导用 stages" % MANIFEST)
+    if single is not None:
+        plain = [single]
+    if not plain:
+        raise OsLabError("%s：缺 stages（或单级的 boot）" % MANIFEST)
+    if not all(isinstance(item, (str, dict)) for item in plain):
+        raise OsLabError("%s：stages 每项是路径，或 { path = ..., addr = 0x... }" % MANIFEST)
+    out = []
+    for index, item in enumerate(plain):
+        patch = item if isinstance(item, dict) else {"path": item}
+        path = _string(patch, "path")
+        if workspace.ext(path) not in ASM_OK:
+            raise OsLabError("%s：stages 只收 %s" % (MANIFEST, " / ".join(ASM_OK)))
+        addr = _number(patch, "addr", DEFAULT_BASE if index == 0 else 0, 0, KERNEL_MAX, 16)
+        if index == 0 and not addr:
+            raise OsLabError("%s：第一个 stage 是引导扇区，addr 不能是 0" % MANIFEST)
+        out.append({"path": _join(rel, path), "addr": addr, "index": index})
+    return out
 
 
 def load(directory, base=None):
@@ -78,34 +124,69 @@ def load(directory, base=None):
         raise OsLabError("%s：kind 只能是 %s" % (MANIFEST, " / ".join(KINDS)))
 
     entry = _string(raw, "entry")
-    if workspace.ext(entry) not in (".asm", ".c"):
-        raise OsLabError("%s：entry 必须是 .asm 或 .c" % MANIFEST)
+    if workspace.ext(entry) not in RUNNABLE:
+        raise OsLabError("%s：entry 必须是 %s" % (MANIFEST, " / ".join(RUNNABLE)))
 
+    build = _list(raw, "build")
     plan = {
         "dir": rel,
         "kind": kind,
         "entry": _join(rel, entry),
-        "base": _base(raw),
+        "base": _number(raw, "base", DEFAULT_BASE, 0x500, DEFAULT_BASE, 16),
+        "kernel": DEFAULT_KERNEL,
+        "symbol": str(raw.get("symbol") or DEFAULT_SYMBOL).strip(),
+        "build": build,
+        "image": "",
+        "elf": "",
+        "map": "",
         "boot": "",
         "link": "",
+        "stages": [],
         "sources": [],
+        "cflags": _list(raw, "cflags"),
+        "ldflags": _list(raw, "ldflags"),
+        "includes": _list(raw, "includes"),
     }
     for key in C_ONLY:
         if raw.get(key) and kind != "c":
             raise OsLabError("%s：%s 只有 C 工程用得上（kind = \"c\"）" % (MANIFEST, key))
-    if kind == "c":
-        plan["boot"] = _join(rel, _string(raw, "boot"))
-        plan["link"] = _join(rel, _string(raw, "link"))
-        sources = raw.get("sources") or [entry]
-        if not isinstance(sources, list):
-            raise OsLabError("%s：sources 要是个列表，比如 [\"src/a.c\", \"src/b.c\"]" % MANIFEST)
-        plan["sources"] = [_join(rel, str(item)) for item in sources]
-        if plan["entry"] not in plan["sources"]:
-            raise OsLabError("%s：entry 得在 sources 里，否则链接不到 _start" % MANIFEST)
 
-    for key in [plan["entry"], plan["boot"], plan["link"], *plan["sources"]]:
-        if not key:
-            continue
+    if not plan["symbol"].replace("_", "").isalnum():
+        raise OsLabError("%s：symbol 要是符号名，比如 _start 或 startup_32" % MANIFEST)
+
+    if build:
+        plan["image"] = _join(rel, _string(raw, "image"))
+        plan["elf"] = _join(rel, str(raw.get("elf") or "").strip())
+        plan["map"] = _join(rel, str(raw.get("map") or "").strip())
+        # image 是产物，第一次构建前还不存在，只要求入口在
+        if not os.path.isfile(workspace.full(plan["entry"], base)):
+            raise OsLabError("%s：找不到 %s" % (MANIFEST, plan["entry"]))
+        return plan
+
+    plan["kernel"] = _number(raw, "kernel", DEFAULT_KERNEL, 0, KERNEL_MAX, 16)
+    if kind == "asm":            # stages 可选：写了就是自备引导链，不写就单文件汇编
+        if raw.get("stages") or raw.get("boot"):
+            plan["stages"] = _stages(raw, rel)
+            plan["boot"] = plan["stages"][0]["path"]
+    if kind == "c":
+        plan["stages"] = _stages(raw, rel)
+        plan["link"] = _join(rel, _string(raw, "link"))
+        plan["boot"] = plan["stages"][0]["path"]
+        sources = _list(raw, "sources") or [entry]
+        plan["sources"] = [_join(rel, item) for item in sources]
+        if plan["entry"] not in plan["sources"]:
+            raise OsLabError("%s：entry 得在 sources 里，否则链接不到 %s"
+                             % (MANIFEST, plan["symbol"]))
+        for source in plan["sources"]:
+            if workspace.ext(source) not in RUNNABLE:
+                raise OsLabError("%s：sources 只收 %s" % (MANIFEST, " / ".join(RUNNABLE)))
+    plan["map"] = _join(rel, str(raw.get("map") or "").strip())
+    plan["elf"] = _join(rel, str(raw.get("elf") or "").strip())
+
+    checked = [plan["entry"], *[item["path"] for item in plan["stages"]], *plan["sources"]]
+    if plan["link"]:
+        checked.append(plan["link"])
+    for key in [item for item in checked if item]:
         if not os.path.isfile(workspace.full(key, base)):
             raise OsLabError("%s：找不到 %s" % (MANIFEST, key))
     return plan

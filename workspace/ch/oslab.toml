@@ -1,0 +1,15 @@
+# 两级引导链，纯汇编：bootsect 把 setup 读到 0x9000 再跳过去，setup 干活。
+#
+# stages 按顺序摆，第一个是引导扇区（0 号扇区、正好 512 字节、结尾 AA55），
+# 后面的各自从下一个整扇区开始。每一项可以带 addr，说明它被读进/跳到哪。
+#
+# 这一套是用来撑"引导扇区装不下"的：0 号扇区只负责搬第二级，真正的活放在
+# 后面的扇区里。要连内核一起搞，就把 kind 换成 "c" 并补 sources / link /
+# kernel —— 那时 stages 里多一级内核装载器，内核由它自己读。
+kind = "asm"
+entry = "boot.asm"
+
+stages = [
+  { path = "boot.asm", addr = 0x7C00 },
+  { path = "setup.asm", addr = 0x9000 },
+]

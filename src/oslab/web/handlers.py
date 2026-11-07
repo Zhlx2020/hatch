@@ -304,7 +304,9 @@ async def _action(fn):
 # observation ---------------------------------------------------------
 async def bp_add(request):
     body = await request.json()
-    return await _action(lambda s: s.add_breakpoint(int(body["addr"], 16)))
+    addr = body["addr"]
+    addr = addr if isinstance(addr, int) else int(str(addr or "0"), 16)
+    return await _action(lambda s: s.add_breakpoint(addr))
 
 
 async def bp_del(request):
