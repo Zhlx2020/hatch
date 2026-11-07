@@ -64,7 +64,7 @@ async function runAction(act) {
   document.getElementById("run-menu").classList.remove("open");
   if (act === "disk" || act === "elf") return detail.open(act);
   if (act === "reset") return guarded(api.reset);
-  if (act === "reboot") return boot();
+  if (act === "build") return boot(true);
   return boot();
 }
 
@@ -100,12 +100,17 @@ async function boot(forceBuild) {
   });
 }
 
-document.getElementById("run").addEventListener("click", () => runAction("main"));
+// 主按钮只管跑，Shift 按住就只构建；另一半动作在 ▾ 里
+document.getElementById("run").addEventListener("click", (ev) => boot(ev.shiftKey));
 document.getElementById("run-more").addEventListener("click", (ev) => {
   ev.stopPropagation();
-  const menu = document.getElementById("run-menu");
-  if (!menu.classList.contains("open")) settings.paint();
-  menu.classList.toggle("open");
+  settings.close();
+  document.getElementById("run-menu").classList.toggle("open");
+});
+document.getElementById("gear").addEventListener("click", (ev) => {
+  ev.stopPropagation();
+  document.getElementById("run-menu").classList.remove("open");
+  settings.toggle();
 });
 document.getElementById("run-menu").addEventListener("click", (ev) => {
   const item = ev.target.closest("button[data-act]");
@@ -113,6 +118,7 @@ document.getElementById("run-menu").addEventListener("click", (ev) => {
 });
 document.addEventListener("click", () => {
   document.getElementById("run-menu").classList.remove("open");
+  settings.close();
 });
 for (const button of document.querySelectorAll("[data-open]")) {
   button.addEventListener("click", () => detail.open(button.dataset.open));

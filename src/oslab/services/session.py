@@ -129,9 +129,9 @@ class Session:
                 self.cursor = 0
                 self.file = name
                 self.arbiter.to(state.RUNNING, "booted")
-                if self.tune["run"]["pause_at_entry"]:
+                # 默认一路放行：有红点就停在第一个红点。pause_at_entry 置 false 才真的停在复位向量
+                if self.tune["run"].get("pause_at_entry", True) or placed:
                     self.backend.cont()
-                    # 入口就有断点时会立刻停下来，等一小会儿再看
                     for _ in range(30):
                         if self.arbiter.state != state.RUNNING:
                             break
