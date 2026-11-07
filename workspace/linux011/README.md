@@ -10,6 +10,8 @@
 ## 怎么跑
 
 1. 打开 `init/main.c`，点「运行」。hatch 会用 w64devkit 编内核、拼引导软盘、启 QEMU。
+   内存、B 盘、`-no-reboot` 写在 `oslab.toml` 的 `[qemu]` 里跟着工程走，
+   全局运行配置被改回默认也不影响这台机器。
 2. `-S` 会让机器停在 0xFFF0，点「继续」才是真开机。
 3. 内核打印 `Partition table ok.`、`Free mem:` 之后会挂上 B 盘（`rootfs/out/root.img`），
    执行 `/etc/rc`，给你一个 `hatch$` 提示符。能试的命令：`ls`、`cat hello.txt`、`cat /etc/rc`、

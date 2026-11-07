@@ -108,3 +108,10 @@ includes = ["include"]
 
 # 内核 143 KB，解开超过一张盘的余量：0.11 的 bootsect 自己给内核封了 0x3000 段
 # （196,608 字节），超了它会读不到头，所以别把优化关掉又加一堆调试信息。
+
+# 这台机器要的东西跟着工程走：16 MB 内存、B 盘当根、崩溃不自动复位
+[qemu]
+profile = "floppy"
+memory = 16
+extra = ["-no-reboot"]
+disks = [{ path = "linux011/rootfs/out/root.img", iface = "ide", index = 0 }]

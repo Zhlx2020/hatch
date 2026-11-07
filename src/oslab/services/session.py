@@ -18,7 +18,7 @@ from ..core.arbiter import Arbiter
 from ..core.errors import BackendError, BadTransition, OsLabError
 from ..display.rfb import RfbSource
 from ..display.vnc import VncSource
-from . import build, linemap, settings, sourcemap, workspace
+from . import build, linemap, project, settings, sourcemap, workspace
 from .serial import SerialBuffer
 
 REG_LINE = re.compile(r"^(eip|rip):\s*(?:0x)?([0-9a-fA-F]+)")
@@ -109,6 +109,7 @@ class Session:
                     self.source_map = {addr: line for line, addr in current_lines.items()}
                 self._teardown()
                 self.tune = settings.with_project(settings.load(), name)
+                self.tune = settings.layer(self.tune, self._project_qemu(name))
                 for disk in self.tune["qemu"].get("disks") or []:
                     if not os.path.isfile(workspace.full(disk["path"])):
                         raise OsLabError("附加盘不存在：%s" % disk["path"])
@@ -117,7 +118,8 @@ class Session:
                 self.backend.on_stop = self._on_stop
                 if not self._await_ready():
                     raise OsLabError("模拟器未就绪")
-                kept = sorted(self.bps)   # 手动断点跨次运行不丢，重启后重新下回去
+                # 手动断点只在“同一份文件重跑”时留着；换了程序地址就对不上了
+                kept = sorted(self.bps) if self.file == name else []
                 self.bps.clear()
                 # 红点在构建后才有地址：先写断点，再放行，避免跑过头
                 placed = []
@@ -154,6 +156,16 @@ class Session:
                     pass
                 raise
             return {"state": self.arbiter.state, "file": name}
+
+    def _project_qemu(self, name):
+        """工程清单里的 [qemu]：跟着工程走，不靠用户设置里那份全局的。"""
+        try:
+            directory = project.find(name)
+            if not directory:
+                return {}
+            return project.load(directory).get("qemu") or {}
+        except OsLabError:
+            return {}
 
     def _run_when_online(self, timeout=20.0):
         """Bochs blocks until an rfb client finishes the handshake; only then can

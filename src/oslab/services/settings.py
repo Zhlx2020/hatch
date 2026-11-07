@@ -362,6 +362,19 @@ def with_project(view, path, base=None):
     return view
 
 
+def layer(view, extra):
+    """项目清单里的 [qemu] 盖在用户设置上：工程自己带的盘和内存，换台机器也丢不了。"""
+    merged = dict(view)
+    qemu = dict(view.get("qemu") or {})
+    for key in ("profile", "memory", "disks", "extra"):
+        value = extra.get(key)
+        if value not in (None, "", [], 0):
+            qemu[key] = value
+    if extra:
+        merged["qemu"] = _clean_qemu(qemu)
+    return merged
+
+
 def check_extra(items):
     """One argument per entry; the flag must be whitelisted."""
     if not isinstance(items, list):

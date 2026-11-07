@@ -59,6 +59,32 @@ def test_manifest_refuses_typo_and_misplaced_keys(workdir):
         project.load("p", str(root))
 
 
+def test_manifest_carries_its_own_qemu_needs(workdir):
+    root = pathlib.Path(workdir)
+    (root / "p").mkdir()
+    (root / "p" / "a.asm").write_text("nop\n", encoding="utf-8")
+    _manifest(root, 'kind = "asm"\nentry = "a.asm"\n'
+                    '[qemu]\nmemory = 16\ndisks = [{ path = "b.img", iface = "ide", index = 0 }]\n')
+    assert project.load("p", str(root))["qemu"]["memory"] == 16
+    _manifest(root, 'kind = "asm"\nentry = "a.asm"\n[qemu]\nmemroy = 16\n')
+    with pytest.raises(OsLabError, match=r"\[qemu\] 里不认识的键 memroy"):
+        project.load("p", str(root))
+    _manifest(root, 'kind = "asm"\nentry = "a.asm"\nqemu = [1]\n')
+    with pytest.raises(OsLabError, match="得是张表"):
+        project.load("p", str(root))
+
+
+def test_project_qemu_layers_over_the_global_settings(workdir):
+    view = settings.save({"qemu": {"memory": 8}}, str(workdir))
+    merged = settings.layer(view, {"memory": 16, "disks": [{"path": "r.img"}]})
+    assert merged["qemu"]["memory"] == 16
+    assert merged["qemu"]["disks"][0]["path"] == "r.img"
+    assert view["qemu"]["memory"] == 8              # 原视图不动
+    assert settings.layer(view, {})["qemu"]["memory"] == 8
+    with pytest.raises(OsLabError, match="2 到 1024"):
+        settings.layer(view, {"memory": 4096})
+
+
 def test_manifest_entry_must_be_in_sources(workdir):
     root = pathlib.Path(workdir)
     (root / "p").mkdir()

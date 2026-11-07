@@ -8,7 +8,7 @@
 | `.asm` | 可汇编的入口文件，末尾必须有 `times 510-($-$$) db 0` 与 `dw 0xaa55` |
 | `.inc` | `%include` 片段，不能单独运行，编辑器不做保存校验 |
 | `.c` `.h` | C 源文件与头文件，必须位于带 `oslab.toml` 的工程目录里才能运行 |
-| `oslab.toml` | 工程清单：`kind`、`entry`、`sources`、`stages`/`boot`、`link`、`kernel`、`base`、`cflags` 等，文件里就地写着每条规则的用例 |
+| `oslab.toml` | 工程清单：`kind`、`entry`、`sources`、`stages`/`boot`、`link`、`kernel`、`base`、`cflags` 等，文件里就地写着每条规则的用例 | `[qemu]` 里还能写这台机器专用的一小段（`profile`/`memory`/`disks`/`extra`），盖过全局运行配置。
 | `settings.toml` | 工作区根上的启动开关、内存、附加盘、QEMU 参数，界面可改 |
 | `.md` `.txt` | 只读文本，可放在目录里当笔记 |
 

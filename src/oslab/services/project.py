@@ -18,7 +18,8 @@ DEFAULT_KERNEL = 0x10000
 DEFAULT_SYMBOL = "_start"
 KERNEL_MAX = 0x100000
 KEYS = ("kind", "entry", "sources", "boot", "stages", "link", "kernel", "base",
-        "symbol", "cflags", "ldflags", "includes", "build", "image", "elf", "map")
+        "symbol", "cflags", "ldflags", "includes", "build", "image", "elf", "map", "qemu")
+QEMU_KEYS = ("profile", "memory", "disks", "extra")
 C_ONLY = ("sources", "link", "kernel", "symbol", "cflags",
           "ldflags", "includes")
 ASM_OK = (".asm", ".s")
@@ -119,6 +120,14 @@ def load(directory, base=None):
         raise OsLabError("%s：不认识的键 %s，能写的是 %s"
                          % (MANIFEST, "、".join(unknown), " / ".join(KEYS)))
 
+    qemu = raw.get("qemu") or {}
+    if not isinstance(qemu, dict):
+        raise OsLabError("%s：[qemu] 得是张表" % MANIFEST)
+    bad_qemu = sorted(key for key in qemu if key not in QEMU_KEYS)
+    if bad_qemu:
+        raise OsLabError("%s：[qemu] 里不认识的键 %s，能写的是 %s"
+                         % (MANIFEST, "、".join(bad_qemu), " / ".join(QEMU_KEYS)))
+
     kind = str(raw.get("kind", "")).lower()
     if kind not in KINDS:
         raise OsLabError("%s：kind 只能是 %s" % (MANIFEST, " / ".join(KINDS)))
@@ -146,6 +155,7 @@ def load(directory, base=None):
         "cflags": _list(raw, "cflags"),
         "ldflags": _list(raw, "ldflags"),
         "includes": _list(raw, "includes"),
+        "qemu": qemu,
     }
     for key in C_ONLY:
         if raw.get(key) and kind != "c":
