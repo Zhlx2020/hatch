@@ -1,8 +1,8 @@
 # 由界面写入，可手工编辑
 
 [run]
-label = "运行"
-hint = ""
+label = "跑起来"
+hint = "点我就构建并启动"
 action = "run"
 pause_at_entry = true
 

@@ -89,7 +89,8 @@ async def main():
 
         # 屏幕 ----------------------------------------------------------
         async with session.ws_connect(BASE + "/ws/screen") as ws:
-            first = await asyncio.wait_for(ws.receive_bytes(), 5)
+            # 第一次接手画面要等客户机把 VNC 服务开起来，慢机器上要十几秒
+            first = await asyncio.wait_for(ws.receive_bytes(), 25)
             check("屏幕握手有输出", first[:4] == b"RFB ")
 
         # 运行与调试 ----------------------------------------------------

@@ -67,7 +67,7 @@ function siblingsOf(dir) {
   return names;
 }
 
-function nodeAt(path) {
+export function nodeAt(path) {
   const walk = (list) => {
     for (const node of list) {
       if (node.path === path) return node;
@@ -204,7 +204,8 @@ async function promptCreate(dir, kind) {
       value: (dir ? dir + "/" : "") + base,
       placeholder: isDir ? "目录名" : "文件名",
       suffix: isDir ? "目录" : "纯文本",
-      check: (value) => dialog.nameProblem(value, { allowSlash: true, taken }),
+      check: (value) => dialog.nameProblem(value, {
+        allowSlash: true, taken, base: dir, exists: (path) => Boolean(nodeAt(path)) }),
     }],
     note: isDir
       ? "带上 <span class=\"mono\">/</span> 可以一次建出多层目录。"
@@ -236,9 +237,13 @@ async function promptRename(node) {
     tone: node.kind === "dir" ? "dir" : "file",
     confirm: "改名",
     fields: node.kind === "dir"
-      ? [{ name: "stem", label: "新名字", value: stem, check: (v) => dialog.nameProblem(v, { taken }) }]
+      ? [{ name: "stem", label: "新名字", value: stem, check: (v) => dialog.nameProblem(v, {
+          taken, base: parent, keep: node.path,
+          exists: (path) => Boolean(nodeAt(path)) }) }]
       : [{ name: "stem", label: "新名字", value: stem,
-          check: (v) => dialog.nameProblem(v + ext, { taken }) },
+          check: (v) => dialog.nameProblem(v + ext, {
+            taken, base: parent, keep: node.path,
+            exists: (path) => Boolean(nodeAt(path)) }) },
         { name: "ext", label: "后缀", value: ext, suffix: "可留空",
           check: (v) => (/^\.?[\w.+-]{0,12}$/.test(v) ? "" : "后缀只能是字母数字 . _ + -") }],
     note: "只改大小写也算改名；<b>路径会跟着变</b>，断点位置会保留。",

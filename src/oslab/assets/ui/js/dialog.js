@@ -26,7 +26,8 @@ function label(text) {
 }
 
 // 单个“名字”字段的通用规则：不能为空、不能带分隔符、不能是保留名
-function checkName(value, { allowSlash = false, taken = null, keep = "" } = {}) {
+// taken 是同一层已有的名字；exists 能顺着子路径查树上是否真的存在
+function checkName(value, { allowSlash = false, taken = null, keep = "", base = "", exists = null } = {}) {
   const name = value.trim();
   if (!name) return "名字不能为空";
   if (ILLEGAL.test(name)) return '不能含 : * ? " < > | \\';
@@ -36,7 +37,13 @@ function checkName(value, { allowSlash = false, taken = null, keep = "" } = {}) 
   const last = name.split("/").pop();
   if (RESERVED.has(last.toLowerCase())) return "这是 Windows 保留名";
   if (last.length > 64) return "名字太长（最多 64 字）";
-  if (taken && last !== keep && taken.has(last)) return "同级已经有重名了";
+  if (last !== keep && taken && taken.has(last)) return "同级已经有重名了";
+  if (exists) {
+    const full = base && name !== base && !name.startsWith(base + "/")
+      ? base + "/" + name.replace(/^\/+/, "")
+      : name;
+    if (full !== keep && exists(full.replace(/\/+$/, ""))) return "这一层已经有同名的了";
+  }
   return "";
 }
 
