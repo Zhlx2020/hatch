@@ -96,7 +96,7 @@ class Session:
                 if current_lines:      # C 的地址反查也走同一张表
                     self.source_map = {addr: line for line, addr in current_lines.items()}
                 self._teardown()
-                self.tune = settings.load()
+                self.tune = settings.with_project(settings.load(), name)
                 self.backend = QemuBackend(self.dir, self.image, self.tune)
                 self.backend.start()
                 self.backend.on_stop = self._on_stop

@@ -221,6 +221,24 @@ async def main():
                                      {"qemu": {"profile": "floppy", "extra": []}})
         check("配置可还原", status == 200 and restored["qemu"]["profile"] == "floppy")
 
+        # 运行配置：多份、切换、拒绝重名、删除 ---------------------------------
+        base_cfg = restored["runs"][0]
+        status, added = await put(session, "/api/settings", {"runs": [
+            base_cfg,
+            {"name": "冷档", "label": "调试", "profile": "cold", "pause_at_entry": False},
+        ], "active": "冷档"})
+        check("能存多份配置并切过去", status == 200 and added["active"] == "冷档"
+              and len(added["runs"]) == 2 and added["qemu"]["profile"] == "cold", str(added)[:80])
+        status, dup = await put(session, "/api/settings",
+                                {"runs": [base_cfg, dict(base_cfg, profile="cold")]})
+        check("配置重名被拒", status == 400 and "重复" in (dup.get("error") or ""), str(dup))
+        status, none = await put(session, "/api/settings", {"runs": []})
+        check("配置不能全删光", status == 400 and "至少" in (none.get("error") or ""), str(none))
+        status, one = await put(session, "/api/settings",
+                                {"runs": [dict(base_cfg, label="运行")], "active": base_cfg["name"]})
+        check("删回一份", status == 200 and len(one["runs"]) == 1
+              and one["run"]["label"] == "运行", str(one)[:80])
+
         # 清理 ----------------------------------------------------------
         async with session.delete(BASE + "/api/node?path=" + STAMP + "-u.asm") as resp:
             check("删除移动到根的文件", resp.status == 200)

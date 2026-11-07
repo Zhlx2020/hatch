@@ -27,8 +27,9 @@ function paint() {
   for (const button of box.querySelectorAll("#settings-tabs button[data-tab]")) {
     button.classList.toggle("on", button.dataset.tab === tab);
   }
+  body.classList.toggle("wide", false);
   if (tab === "run") {
-    body.innerHTML = `
+    body.innerHTML = `<p class="acting"></p>` + `
       <label><span>按钮文字</span>
         <input id="s-label" type="text" maxlength="12" />
         <div class="hint">顶栏那个绿色按钮上的字，最多 12 个字</div>
@@ -46,6 +47,9 @@ function paint() {
       </label>
       <label class="check"><input id="s-pause" type="checkbox" /><span>启动后立刻停在入口</span></label>
     `;
+    const acting = body.querySelector(".acting");
+    if (acting) acting.textContent = "正在改配置：" + data.active
+      + "　（▾ 里可以新建、删除、换一份）";
     document.getElementById("s-label").value = data.run.label;
     document.getElementById("s-hint").value = data.run.hint;
     document.getElementById("s-action").value = data.run.action;
@@ -110,23 +114,29 @@ export function applyRunButton() {
 export async function load() {
   const out = await api.settings();
   profiles = out.profiles || [];
-  data = {
-    run: { ...DEFAULTS.run, ...(out.run || {}) },
-    qemu: { ...DEFAULTS.qemu, ...(out.qemu || {}) },
-  };
-  applyRunButton();
+  adopt(out);
   if (box.classList.contains("open")) paint();
   return data;
 }
 
+function adopt(out) {
+  data = {
+    runs: out.runs || [],
+    active: out.active || "",
+    run: { ...DEFAULTS.run, ...(out.run || {}) },
+    qemu: { ...DEFAULTS.qemu, ...(out.qemu || {}) },
+  };
+  applyRunButton();
+}
+
 export function current() {
-  return data;
+  return { ...data, profiles };
 }
 
 export function open() {
   tab = "run";
   paint();
-  say("改完重启会话后生效");
+  say("改完保存，重启会话后生效");
   box.classList.add("open");
 }
 
@@ -149,28 +159,26 @@ export function install() {
   }
   saveBtn.addEventListener("click", async () => {
     collect();
-    const out = await api.saveSettings(data);
+    const out = await api.saveSettings({ ...data, active: data.active });
     if (out.error) {
       say(out.error, true);
       return;
     }
     profiles = out.profiles || profiles;
-    data = { run: out.run, qemu: out.qemu };
-    applyRunButton();
+    adopt(out);
     panels.serialMode(out.qemu.profile === "terminal");
     say("已保存，重启会话后生效");
   });
   resetBtn.addEventListener("click", async () => {
-    const out = await api.saveSettings(DEFAULTS);
+    const out = await api.saveSettings({ ...DEFAULTS, active: data.active });
     if (out.error) {
       say(out.error, true);
       return;
     }
-    data = { run: out.run, qemu: out.qemu };
-    applyRunButton();
+    adopt(out);
     panels.serialMode(out.qemu.profile === "terminal");
     paint();
-    say("已恢复默认");
+    say("这份配置已恢复默认");
   });
   load();
 }

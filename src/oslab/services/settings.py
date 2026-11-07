@@ -4,6 +4,7 @@ QEMU 参数不再让用户拼：一组测过的模板（profile）固定下来�
 模板只覆盖「把机器起对、起稳」这件事，附加参数负责个别实验。
 """
 import os
+import tomllib
 
 from .. import config
 from ..core.errors import OsLabError
@@ -16,6 +17,9 @@ RUN = {
     "action": "run",          # run | build
     "pause_at_entry": True,
 }
+DEFAULT_NAME = "默认"
+MAX_RUNS = 12
+MAX_NAME = 20
 # 模板：id -> 名字、说明、固定参数。参数里的 %s 是镜像路径。
 PROFILES = {
     "floppy": {
@@ -187,79 +191,140 @@ def screen_of(name):
     return item["screen"]
 
 
-def load(base=None):
-    import tomllib
+def _new_config(name=DEFAULT_NAME):
+    return {"name": name, "label": RUN["label"], "hint": "", "action": "run",
+            "pause_at_entry": True, "profile": DEFAULT_PROFILE, "extra": []}
 
-    data = {"run": dict(RUN), "qemu": dict(QEMU)}
+
+def _clean_config(raw, fallback=None):
+    """一份运行配置：按钮长什么样 + 该用哪个模板，逐项校验。"""
+    base = dict(fallback or _new_config())
+    name = str(raw.get("name", base["name"])).strip() or base["name"]
+    if len(name) > MAX_NAME:
+        raise OsLabError("配置名最多 %d 字" % MAX_NAME)
+    label = str(raw.get("label", base["label"])).strip() or RUN["label"]
+    hint = str(raw.get("hint", base["hint"])).strip()
+    action = raw.get("action", base["action"])
+    if action not in ("run", "build"):
+        raise OsLabError("按钮动作只能是 run 或 build")
+    pause = raw.get("pause_at_entry", base["pause_at_entry"])
+    if not isinstance(pause, bool):
+        raise OsLabError("入口暂停必须是真假值")
+    profile = raw.get("profile", base["profile"])
+    if profile not in PROFILES:
+        raise OsLabError("没有这个模板：%s" % profile)
+    extra = raw.get("extra", base["extra"])
+    return {"name": name, "label": label[:12], "hint": hint[:80], "action": action,
+            "pause_at_entry": pause, "profile": profile,
+            "extra": check_extra(extra) if isinstance(extra, list) else []}
+
+
+def _view(runs, active):
+    """对外的一份快照：当前配置铺平成 run/qemu，另外附上清单。"""
+    chosen = next((item for item in runs if item["name"] == active), runs[0])
+    return {
+        "runs": [dict(item) for item in runs],
+        "active": chosen["name"],
+        "run": {"label": chosen["label"], "hint": chosen["hint"],
+                "action": chosen["action"], "pause_at_entry": chosen["pause_at_entry"]},
+        "qemu": {"profile": chosen["profile"], "extra": list(chosen["extra"])},
+    }
+
+
+def load(base=None):
+    runs = []
+    active = DEFAULT_NAME
     name = _path(base)
-    if not os.path.exists(name):
-        return data
-    try:
-        with open(name, "rb") as fh:
-            raw = tomllib.load(fh)
-    except (OSError, tomllib.TOMLDecodeError):
-        return data
-    run = raw.get("run") or {}
-    if isinstance(run.get("label"), str) and run["label"].strip():
-        data["run"]["label"] = run["label"].strip()[:12]
-    if isinstance(run.get("hint"), str):
-        data["run"]["hint"] = run["hint"].strip()[:80]
-    if run.get("action") in ("run", "build"):
-        data["run"]["action"] = run["action"]
-    if isinstance(run.get("pause_at_entry"), bool):
-        data["run"]["pause_at_entry"] = run["pause_at_entry"]
-    qemu = raw.get("qemu") or {}
-    if qemu.get("profile") in PROFILES:
-        data["qemu"]["profile"] = qemu["profile"]
-    if isinstance(qemu.get("extra"), list):
+    if os.path.exists(name):
         try:
-            data["qemu"]["extra"] = check_extra(qemu["extra"])
-        except OsLabError:
-            data["qemu"]["extra"] = []
-    return data
+            with open(name, "rb") as fh:
+                raw = tomllib.load(fh)
+        except (OSError, tomllib.TOMLDecodeError):
+            raw = {}
+        for item in raw.get("runs") or []:
+            if not isinstance(item, dict):
+                continue
+            try:
+                runs.append(_clean_config(item))
+            except OsLabError:
+                continue
+        if not runs and isinstance(raw.get("run"), dict):
+            # 老文件只有一份 [run]/[qemu]：搬成「默认」这一份
+            legacy = _new_config()
+            legacy.update({k: v for k, v in (raw.get("qemu") or {}).items()
+                           if k in ("profile", "extra")})
+            try:
+                runs.append(_clean_config(raw["run"], legacy))
+            except OsLabError:
+                runs = []
+        if isinstance(raw.get("active"), str) and any(
+                item["name"] == raw["active"] for item in runs):
+            active = raw["active"]
+    if not runs:
+        runs = [_new_config()]
+    seen, unique = set(), []
+    for item in runs:
+        while item["name"] in seen:
+            item["name"] += "2"
+        seen.add(item["name"])
+        unique.append(item)
+    return _view(unique, active)
 
 
 def save(raw, base=None):
     """Validate then persist; raises with a readable reason when refused."""
     current = load(base)
+    runs = current["runs"]
+    active = current["active"]
+
+    if "runs" in raw:
+        items = raw["runs"]
+        if not isinstance(items, list):
+            raise OsLabError("配置列表要写成数组")
+        if not items:
+            raise OsLabError("至少留一份配置")
+        if len(items) > MAX_RUNS:
+            raise OsLabError("配置最多 %d 份" % MAX_RUNS)
+        runs, names = [], set()
+        for item in items:
+            if not isinstance(item, dict):
+                raise OsLabError("每份配置要写成对象")
+            cleaned = _clean_config(item)
+            if cleaned["name"] in names:
+                raise OsLabError("配置名重复：%s" % cleaned["name"])
+            names.add(cleaned["name"])
+            runs.append(cleaned)
+
+    wanted = raw.get("active", active)
+    if not any(item["name"] == wanted for item in runs):
+        raise OsLabError("没有这份配置：%s" % wanted)
+
+    # 设置面板是按字段改当前这一份的，允许只给 run/qemu
     run = raw.get("run") or {}
-    label = str(run.get("label", current["run"]["label"])).strip() or "运行"
-    hint = str(run.get("hint", current["run"]["hint"])).strip()
-    action = run.get("action", current["run"]["action"])
-    if action not in ("run", "build"):
-        raise OsLabError("按钮动作只能是 run 或 build")
-    pause = run.get("pause_at_entry", current["run"]["pause_at_entry"])
-    if not isinstance(pause, bool):
-        raise OsLabError("入口暂停必须是真假值")
-
     qemu = raw.get("qemu") or {}
-    values = dict(current["qemu"])
-    if "profile" in qemu:
-        if qemu["profile"] not in PROFILES:
-            raise OsLabError("没有这个模板：%s" % qemu["profile"])
-        values["profile"] = qemu["profile"]
-    if "extra" in qemu:
-        values["extra"] = check_extra(qemu["extra"])
+    if run or qemu:
+        target = next(item for item in runs if item["name"] == wanted)
+        merged = dict(target)
+        merged.update({key: value for key, value in run.items() if key in RUN})
+        merged.update({key: value for key, value in qemu.items() if key in ("profile", "extra")})
+        runs[runs.index(target)] = _clean_config(merged, target)
 
-    data = {
-        "run": {"label": label[:12], "hint": hint[:80],
-                "action": action, "pause_at_entry": pause},
-        "qemu": values,
-    }
+    data = {"runs": runs, "active": wanted}
     write(data, base)
-    return data
+    return _view(runs, wanted)
 
 
 def write(data, base=None):
-    lines = ["# 由界面写入，可手工编辑", "", "[run]",
-             'label = "%s"' % _esc(data["run"]["label"]),
-             'hint = "%s"' % _esc(data["run"]["hint"]),
-             'action = "%s"' % data["run"]["action"],
-             "pause_at_entry = %s" % ("true" if data["run"]["pause_at_entry"] else "false"),
-             "", "[qemu]",
-             'profile = "%s"' % data["qemu"]["profile"],
-             "extra = [%s]" % ", ".join('"%s"' % _esc(item)
-                                       for item in data["qemu"]["extra"])]
+    lines = ["# 由界面写入，可手工编辑", 'active = "%s"' % _esc(data["active"])]
+    for item in data["runs"]:
+        lines += ["", "[[runs]]",
+                  'name = "%s"' % _esc(item["name"]),
+                  'label = "%s"' % _esc(item["label"]),
+                  'hint = "%s"' % _esc(item["hint"]),
+                  'action = "%s"' % item["action"],
+                  "pause_at_entry = %s" % ("true" if item["pause_at_entry"] else "false"),
+                  'profile = "%s"' % item["profile"],
+                  "extra = [%s]" % ", ".join('"%s"' % _esc(one) for one in item["extra"])]
     path = _path(base)
     with open(path, "w", newline="\n", encoding="utf-8") as fh:
         fh.write("\n".join(lines) + "\n")
@@ -267,6 +332,49 @@ def write(data, base=None):
 
 def _esc(text):
     return str(text).replace("\\", "\\\\").replace('"', '\\"')
+
+
+def project_run(path, base=None):
+    """项目清单里的 [run]：只为这个工程改按钮和入口暂停。"""
+    from . import project
+
+    try:
+        directory = project.find(path, base)
+    except OsLabError:
+        return {}
+    if not directory:
+        return {}
+    name = os.path.join(workspace.root(base), directory.replace("/", os.sep), project.MANIFEST)
+    try:
+        with open(name, "rb") as fh:
+            raw = tomllib.load(fh)
+    except (OSError, tomllib.TOMLDecodeError):
+        return {}
+    run = raw.get("run")
+    if not isinstance(run, dict):
+        return {}
+    out = {"dir": directory}
+    if isinstance(run.get("label"), str) and run["label"].strip():
+        out["label"] = run["label"].strip()[:12]
+    if isinstance(run.get("hint"), str):
+        out["hint"] = run["hint"].strip()[:80]
+    if run.get("action") in ("run", "build"):
+        out["action"] = run["action"]
+    if isinstance(run.get("pause_at_entry"), bool):
+        out["pause_at_entry"] = run["pause_at_entry"]
+    return out
+
+
+def with_project(view, path, base=None):
+    """把项目的 [run] 叠在配置上；模板与附加参数仍由配置说了算。"""
+    extra = project_run(path, base)
+    if not extra:
+        return view
+    for key in ("label", "hint", "action", "pause_at_entry"):
+        if key in extra:
+            view["run"][key] = extra[key]
+    view["from_project"] = extra["dir"]
+    return view
 
 
 def check_extra(items):
@@ -278,16 +386,20 @@ def check_extra(items):
     for raw in items:
         for part in str(raw).split():
             if part.startswith("-"):
-                if part in MANAGED:
-                    raise OsLabError("%s 已经由模板管理" % part)
-                if part not in ALLOWED:
-                    raise OsLabError("不认识的参数：%s" % part)
+                # 存下来的形式是 -flag=value，读回来也要认
+                head, _, tail = part.partition("=")
+                if head in MANAGED:
+                    raise OsLabError("%s 已经由模板管理" % head)
+                if head not in ALLOWED:
+                    raise OsLabError("不认识的参数：%s" % head)
                 if pending:
                     raise OsLabError("%s 缺少取值" % pending)
-                if part in NEEDS_VALUE:
-                    pending = part
-                else:
+                if tail:
                     out.append(part)
+                elif head in NEEDS_VALUE:
+                    pending = head
+                else:
+                    out.append(head)
             else:
                 if not pending:
                     raise OsLabError("多余的取值：%s" % part)

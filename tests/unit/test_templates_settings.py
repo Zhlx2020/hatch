@@ -112,4 +112,61 @@ def test_qemu_command_uses_profile(workdir):
     assert "-smp" in args and args[args.index("-smp") + 1] == "2"
     assert "-no-reboot" in args
     assert args[-1] == "-S"
-    assert "-gdb" in args and "-serial" in args
+    assert "-gdb" in args and "-serial" in args                
+
+def test_runs_start_with_one_default(workdir):
+    data = settings.load(str(workdir))
+    assert data['active'] == settings.DEFAULT_NAME
+    assert len(data['runs']) == 1
+    assert data['runs'][0]['profile'] == settings.DEFAULT_PROFILE
+
+
+def test_runs_can_hold_several_and_switch(workdir):
+    data = settings.save({'runs': [
+        {'name': '平时', 'label': '运行', 'profile': 'floppy'},
+        {'name': '冷调试', 'label': '调试', 'profile': 'cold', 'pause_at_entry': False},
+    ], 'active': '冷调试'}, str(workdir))
+    assert data['active'] == '冷调试'
+    assert data['qemu']['profile'] == 'cold'
+    back = settings.load(str(workdir))
+    assert [one['name'] for one in back['runs']] == ['平时', '冷调试']
+
+
+def test_runs_reject_duplicate_and_empty(workdir):
+    with pytest.raises(OsLabError, match='重复'):
+        settings.save({'runs': [{'name': 'a'}, {'name': 'a'}]}, str(workdir))
+    with pytest.raises(OsLabError, match='至少'):
+        settings.save({'runs': []}, str(workdir))
+
+
+def test_runs_switch_unknown_name_is_refused(workdir):
+    with pytest.raises(OsLabError, match='没有这份配置'):
+        settings.save({'active': '不在'}, str(workdir))
+
+
+def test_old_single_run_file_migrates(workdir):
+    (pathlib.Path(workdir) / settings.NAME).write_text(
+        '[run]\nlabel = "老"\naction = "build"\n\n[qemu]\nprofile = "cold"\n',
+        encoding='utf-8')
+    data = settings.load(str(workdir))
+    assert len(data['runs']) == 1 and data['runs'][0]['label'] == '老'
+    assert data['qemu']['profile'] == 'cold'
+
+
+def test_project_run_section_overrides_button(workdir):
+    root = pathlib.Path(workdir)
+    (root / 'p').mkdir()
+    (root / 'p' / 'oslab.toml').write_text(
+        'kind = "asm"\nentry = "a.asm"\n[run]\nlabel = "跑这个"\npause_at_entry = false\n',
+        encoding='utf-8')
+    (root / 'p' / 'a.asm').write_text('bits 16\n', encoding='utf-8')
+    view = settings.with_project(settings.load(str(workdir)), 'p/a.asm', str(workdir))
+    assert view['run']['label'] == '跑这个'
+    assert view['run']['pause_at_entry'] is False
+    assert view['from_project'] == 'p'
+    assert view['qemu']['profile'] == settings.DEFAULT_PROFILE
+
+
+def test_extra_survives_round_trip(workdir):
+    settings.save({'qemu': {'extra': ['-fsdev', 'local,path=x']}}, str(workdir))
+    assert settings.load(str(workdir))['qemu']['extra'] == ['-fsdev=local,path=x']

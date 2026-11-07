@@ -83,6 +83,19 @@
 }
 #modal input.mono { font-family: Consolas, monospace; }
 #modal input.bad { color: #f3a0a0; }
+#modal select {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--fg, #dfe6ec);
+  font-size: 12.5px;
+  padding: 7px 0;
+}
+#modal select option { background: #10161b; color: var(--fg, #dfe6ec); }
+#modal .field.check .wrap { background: transparent; border-color: transparent; padding: 0; }
+#modal .field.check input { flex: 0 0 auto; accent-color: #5fbf92; }
 #modal .suffix {
   flex: 0 0 auto;
   font-size: 10.5px;

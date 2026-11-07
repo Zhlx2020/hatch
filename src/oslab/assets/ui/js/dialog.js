@@ -86,16 +86,30 @@ function build(spec) {
   const inputs = [];
   for (const field of spec.fields || []) {
     const row = document.createElement("label");
-    row.className = "field";
+    row.className = field.kind === "check" ? "field check" : "field";
     row.innerHTML = `<span class="cap"></span><span class="wrap"></span><span class="tip"></span>`;
     row.querySelector(".cap").textContent = field.label;
-    const input = document.createElement("input");
-    input.type = "text";
-    input.value = field.value || "";
-    input.placeholder = field.placeholder || "";
-    input.autocomplete = "off";
-    input.spellcheck = false;
-    if (field.mono !== false) input.classList.add("mono");
+    const input = document.createElement(field.kind === "select" ? "select" : "input");
+    if (field.kind === "select") {
+      for (const option of field.options || []) {
+        const one = document.createElement("option");
+        one.value = option.value;
+        one.textContent = option.label;
+        if (option.value === field.value) one.selected = true;
+        input.append(one);
+      }
+    } else if (field.kind === "check") {
+      input.type = "checkbox";
+      input.checked = Boolean(field.value);
+      input.classList.remove("mono");
+    } else {
+      input.type = "text";
+      input.value = field.value || "";
+      input.placeholder = field.placeholder || "";
+      input.autocomplete = "off";
+      input.spellcheck = false;
+      if (field.mono !== false) input.classList.add("mono");
+    }
     row.querySelector(".wrap").append(input);
     if (field.suffix) {
       const tail = document.createElement("span");
@@ -113,7 +127,7 @@ function build(spec) {
 function validateNow() {
   if (!current) return "";
   for (const { field, input, tip } of current.inputs) {
-    const msg = field.check ? field.check(input.value) : "";
+    const msg = field.check ? field.check(currentValue(input)) : "";
     tip.textContent = msg;
     input.classList.toggle("bad", Boolean(msg));
     if (msg) return msg;
@@ -129,8 +143,13 @@ function refreshGo() {
   return problem;
 }
 
+function currentValue(input) {
+  if (input.type === "checkbox") return input.checked;
+  return input.value.trim();
+}
+
 function values() {
-  return Object.fromEntries(current.inputs.map((f) => [f.field.name, f.input.value.trim()]));
+  return Object.fromEntries(current.inputs.map((f) => [f.field.name, currentValue(f.input)]));
 }
 
 function close(result) {
@@ -154,7 +173,7 @@ function onKeydown(ev) {
     return;
   }
   if (ev.key === "Tab") {
-    const focusable = [...current.sheet.querySelectorAll("input, button")].filter(
+    const focusable = [...current.sheet.querySelectorAll("input, select, button")].filter(
       (el) => !el.disabled);
     if (!focusable.length) return;
     const first = focusable[0];
@@ -227,13 +246,21 @@ export function open(spec) {
   current = { spec, sheet, inputs, restore, resolve: null, busy: false };
 
   for (const entry of inputs) {
-    entry.input.addEventListener("input", () => {
+    entry.input.addEventListener(entry.input.tagName === "SELECT" ? "change" : "input", () => {
       sheet.querySelector(".err").textContent = "";
-      if (spec.oninput) spec.oninput(entry.input.value, sheet, entry.field.name);
+      if (spec.oninput) spec.oninput(currentValue(entry.input), sheet, entry.field.name);
       refreshGo();
     });
   }
   sheet.querySelector(".cancel").addEventListener("click", () => close(null));
+  for (const extra of spec.extra || []) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "ghost";
+    button.textContent = extra.text;
+    button.addEventListener("click", () => spec.onExtra?.(extra.act));
+    sheet.querySelector(".cancel").before(button);
+  }
   sheet.addEventListener("submit", (ev) => {
     ev.preventDefault();
     submit();
@@ -245,7 +272,7 @@ export function open(spec) {
   const first = inputs[0]?.input;
   first?.focus();
   const pick = spec.select || "stem";
-  if (first && pick !== "none") {
+  if (first && pick !== "none" && first.tagName !== "SELECT") {
     const dot = first.value.lastIndexOf(".");
     if (pick === "stem" && dot > 0 && !first.value.includes("/")) first.setSelectionRange(0, dot);
     else first.select();
