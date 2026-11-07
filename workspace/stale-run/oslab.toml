@@ -1,0 +1,6 @@
+kind = "asm"
+entry = "a.asm"
+
+[run]
+label = "跑这个"
+pause_at_entry = false

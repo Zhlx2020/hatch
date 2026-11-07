@@ -48,6 +48,11 @@ def load(directory, base=None):
     except (OSError, tomllib.TOMLDecodeError) as exc:
         raise OsLabError("%s 解析失败：%s" % (MANIFEST, exc)) from exc
 
+    stale = sorted(raw.get("run") or {}) if isinstance(raw.get("run"), dict) else []
+    if stale:
+        raise OsLabError("%s：不再有 [run]（%s 这几项），按钮文字和入口暂停到运行配置里改"
+                         % (MANIFEST, "、".join(stale)))
+
     kind = str(raw.get("kind", "")).lower()
     if kind not in KINDS:
         raise OsLabError("%s：kind 只能是 %s" % (MANIFEST, " / ".join(KINDS)))

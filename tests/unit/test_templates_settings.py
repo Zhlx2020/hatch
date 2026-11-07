@@ -153,18 +153,31 @@ def test_old_single_run_file_migrates(workdir):
     assert data['qemu']['profile'] == 'cold'
 
 
-def test_project_run_section_overrides_button(workdir):
+def test_project_no_longer_changes_the_button(workdir):
     root = pathlib.Path(workdir)
     (root / 'p').mkdir()
     (root / 'p' / 'oslab.toml').write_text(
-        'kind = "asm"\nentry = "a.asm"\n[run]\nlabel = "跑这个"\npause_at_entry = false\n',
-        encoding='utf-8')
+        'kind = "asm"\nentry = "a.asm"\n', encoding='utf-8')
     (root / 'p' / 'a.asm').write_text('bits 16\n', encoding='utf-8')
-    view = settings.with_project(settings.load(str(workdir)), 'p/a.asm', str(workdir))
-    assert view['run']['label'] == '跑这个'
-    assert view['run']['pause_at_entry'] is False
+    saved = settings.load(str(workdir))
+    view = settings.with_project(saved, 'p/a.asm', str(workdir))
+    assert view['run']['label'] == saved['runs'][0]['label']
+    assert view['run']['pause_at_entry'] == saved['runs'][0]['pause_at_entry']
     assert view['from_project'] == 'p'
     assert view['qemu']['profile'] == settings.DEFAULT_PROFILE
+
+
+def test_leftover_run_block_is_rejected(workdir):
+    root = pathlib.Path(workdir)
+    (root / 'p').mkdir()
+    (root / 'p' / 'a.asm').write_text('bits 16\n', encoding='utf-8')
+    (root / 'p' / 'oslab.toml').write_text(
+        'kind = "asm"\nentry = "a.asm"\n[run]\nlabel = "跑这个"\npause_at_entry = false\n',
+        encoding='utf-8')
+    with pytest.raises(OsLabError) as caught:
+        project.load('p', str(workdir))
+    assert '[run]' in str(caught.value)
+    assert 'label' in str(caught.value)
 
 
 def test_extra_survives_round_trip(workdir):

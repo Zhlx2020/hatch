@@ -334,46 +334,16 @@ def _esc(text):
     return str(text).replace("\\", "\\\\").replace('"', '\\"')
 
 
-def project_run(path, base=None):
-    """项目清单里的 [run]：只为这个工程改按钮和入口暂停。"""
+def with_project(view, path, base=None):
+    """按钮长相、入口暂停都只认运行配置；这里只记一下它在哪个工程里。"""
     from . import project
 
     try:
         directory = project.find(path, base)
     except OsLabError:
-        return {}
-    if not directory:
-        return {}
-    name = os.path.join(workspace.root(base), directory.replace("/", os.sep), project.MANIFEST)
-    try:
-        with open(name, "rb") as fh:
-            raw = tomllib.load(fh)
-    except (OSError, tomllib.TOMLDecodeError):
-        return {}
-    run = raw.get("run")
-    if not isinstance(run, dict):
-        return {}
-    out = {"dir": directory}
-    if isinstance(run.get("label"), str) and run["label"].strip():
-        out["label"] = run["label"].strip()[:12]
-    if isinstance(run.get("hint"), str):
-        out["hint"] = run["hint"].strip()[:80]
-    if run.get("action") in ("run", "build"):
-        out["action"] = run["action"]
-    if isinstance(run.get("pause_at_entry"), bool):
-        out["pause_at_entry"] = run["pause_at_entry"]
-    return out
-
-
-def with_project(view, path, base=None):
-    """把项目的 [run] 叠在配置上；模板与附加参数仍由配置说了算。"""
-    extra = project_run(path, base)
-    if not extra:
-        return view
-    for key in ("label", "hint", "action", "pause_at_entry"):
-        if key in extra:
-            view["run"][key] = extra[key]
-    view["from_project"] = extra["dir"]
+        directory = ""
+    if directory:
+        view["from_project"] = directory
     return view
 
 
