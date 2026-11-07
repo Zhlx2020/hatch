@@ -1,0 +1,110 @@
+# Linux 0.11 实验工程：真内核，两级引导，链接在 0x0000，280 多扇区。
+#
+# 源码是 karottc/linux-0.11 那份（原版 1991 年的树），只做了三处现代化改动，
+# 都记在 README 里：行尾 `\ // 注释`、_set_tssldt_desc 的内联汇编、两处对强转
+# 表达式赋值。boot/bootsect.asm 和 boot/setup.asm 是把原来的 as86 语法逐行翻成
+# nasm 的，流程没动。
+#
+# 想跑：点运行。想改内核地址：改下面 kernel。
+kind = "c"
+
+# 点这个文件跑；真正先执行的是 sources 里的第一项 boot/head.s
+entry = "init/main.c"
+
+sources = [
+  "boot/head.s",
+  "boot/stub.s",
+  "fs/bitmap.c",
+  "fs/block_dev.c",
+  "fs/buffer.c",
+  "fs/char_dev.c",
+  "fs/exec.c",
+  "fs/fcntl.c",
+  "fs/file_dev.c",
+  "fs/file_table.c",
+  "fs/inode.c",
+  "fs/ioctl.c",
+  "fs/namei.c",
+  "fs/open.c",
+  "fs/pipe.c",
+  "fs/read_write.c",
+  "fs/stat.c",
+  "fs/super.c",
+  "fs/truncate.c",
+  "init/main.c",
+  "kernel/asm.s",
+  "kernel/blk_drv/floppy.c",
+  "kernel/blk_drv/hd.c",
+  "kernel/blk_drv/ll_rw_blk.c",
+  "kernel/blk_drv/ramdisk.c",
+  "kernel/chr_drv/console.c",
+  "kernel/chr_drv/keyboard.S",
+  "kernel/chr_drv/rs_io.s",
+  "kernel/chr_drv/serial.c",
+  "kernel/chr_drv/tty_io.c",
+  "kernel/chr_drv/tty_ioctl.c",
+  "kernel/exit.c",
+  "kernel/fork.c",
+  "kernel/math/math_emulate.c",
+  "kernel/mktime.c",
+  "kernel/panic.c",
+  "kernel/printk.c",
+  "kernel/sched.c",
+  "kernel/signal.c",
+  "kernel/sys.c",
+  "kernel/system_call.s",
+  "kernel/traps.c",
+  "kernel/vsprintf.c",
+  "lib/_exit.c",
+  "lib/close.c",
+  "lib/ctype.c",
+  "lib/dup.c",
+  "lib/errno.c",
+  "lib/execve.c",
+  "lib/malloc.c",
+  "lib/open.c",
+  "lib/setsid.c",
+  "lib/string.c",
+  "lib/wait.c",
+  "lib/write.c",
+  "mm/memory.c",
+  "mm/page.s",
+]
+
+# 两级：引导扇区（0 号扇区）→ setup（1–4 号扇区），第 5 扇区留空，内核从第 6 扇区起
+stages = [
+  { path = "boot/bootsect.asm", addr = 0x7C00 },
+  { path = "boot/setup.asm", addr = 0x9020 },
+]
+
+link = "boot/kernel.ld"
+
+# 内核链接在 0，由 setup 搬到 0 以后远跳进去——和原版一模一样
+kernel = 0x0
+
+# head.s 的入口符号，不是 _start
+symbol = "startup_32"
+
+# 这份 1991 年的代码要在 gcc 16 下编：关掉内置函数、按 gnu89 认隐式声明，
+# 并且把 PE 的下划线前缀去掉（.s 里的符号是裸名）
+cflags = [
+  "-DHATCH_SERIAL",   # printk 顺手镜像一份到串口，方便无显示器时看
+  "-nostdinc",
+  "-mno-sse",                   # QEMU 默认 CPU 没有 SSE2，gcc 却会用 movdqu 拷结构体
+  "-mno-sse2",
+  "-mno-mmx",
+  "-std=gnu89",
+  "-fno-builtin",
+  "-fno-leading-underscore",
+  "-Wno-implicit-int",
+  "-Wno-implicit-function-declaration",
+  "-Wno-builtin-declaration-mismatch",
+  "-Wno-return-mismatch",
+  "-Wno-int-conversion",
+  "-Wno-incompatible-pointer-types",
+]
+
+includes = ["include"]
+
+# 内核 143 KB，解开超过一张盘的余量：0.11 的 bootsect 自己给内核封了 0x3000 段
+# （196,608 字节），超了它会读不到头，所以别把优化关掉又加一堆调试信息。

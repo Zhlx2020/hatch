@@ -1,0 +1,5 @@
+这里是 B 盘的根文件系统。
+内核从 A 盘读进来，挂上这张 B 盘当根，然后跑 /bin/sh —— sh 是刚才用这套工具链编的，
+按 a.out（ZMAGIC）打的包，只有 syscall、没有 libc。
+
+改了 sh.c 或 rc 之后，重跑 rootfs/mkroot.py 就能重新生成这张盘。

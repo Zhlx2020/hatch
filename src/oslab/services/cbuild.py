@@ -61,8 +61,15 @@ def compile_project(plan, image, base=None, text=None):
         else:
             src = workspace.full(source, base)
         origin = os.path.dirname(workspace.full(source, base))
-        if workspace.ext(source) in (".asm", ".s"):
+        ext = os.path.splitext(source)[1]        # .S 要先过 cpp，不能被小写化吃掉
+        if ext == ".asm":
             _run([config.NASM, "-f", "elf32", "-i", origin + os.sep, src, "-o", target])
+        elif ext == ".S":
+            _run([tool("gcc"), *CFLAGS, *plan["cflags"], "-I", origin, *includes,
+                  "-x", "assembler-with-cpp", "-c", src, "-o", target], env)
+        elif ext == ".s":
+            # .s 是 AT&T 语法：交给 gas，交给 nasm 会一个字都认不出
+            _run([tool("as"), "--32", "-o", target, src])
         else:
             _run([tool("gcc"), *CFLAGS, *plan["cflags"], "-I", origin, *includes,
                   "-c", src, "-o", target], env)
@@ -183,7 +190,7 @@ def run_command(plan, image, base=None):
                                    os.path.dirname(config.C_OBJCOPY),
                                    env.get("PATH", "")])
     result = subprocess.run(line, shell=isinstance(line, str), cwd=cwd,
-                            capture_output=True, text=True, env=env)
+                            capture_output=True, text=True, env=env, errors="replace")
     if result.returncode != 0:
         message = _clean(result.stderr) or _clean(result.stdout)
         raise AssembleError(message or "构建命令失败（退出码 %d）" % result.returncode)
@@ -217,7 +224,7 @@ def run_command(plan, image, base=None):
 
 
 def _run(args, env=None):
-    result = subprocess.run(args, capture_output=True, text=True, env=env)
+    result = subprocess.run(args, capture_output=True, text=True, env=env, errors="replace")
     if result.returncode != 0:
         message = _clean(result.stderr) or _clean(result.stdout)
         raise AssembleError(message or "%s 失败" % os.path.basename(args[0]))

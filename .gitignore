@@ -17,4 +17,9 @@ node_modules/
 
 # 跑测试留下的临时工程
 workspace/e2e*
+workspace/linux011/rootfs/out/
+*.o
+*.elf
+*.exe
+
 *.egg-info/

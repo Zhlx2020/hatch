@@ -1,0 +1,11 @@
+echo Welcome to the hatch / linux 0.11 lab.
+echo The kernel came in from the floppy behind this disk, mounted
+echo this one as root, and started /bin/sh -- built by hatch itself.
+echo
+echo Try:
+echo   ls
+echo   cat hello.txt
+echo   cat /etc/rc
+echo   cd dev ; ls
+echo   clear
+echo

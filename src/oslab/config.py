@@ -60,6 +60,7 @@ QEMU = _tool("qemu-system-i386", "HATCH_QEMU",
 C_GCC = _tool("gcc", "HATCH_GCC", os.path.join(_BIN, "gcc.exe"))
 C_LD = _tool("ld", "HATCH_LD", os.path.join(_BIN, "ld.exe"))
 C_OBJCOPY = _tool("objcopy", "HATCH_OBJCOPY", os.path.join(_BIN, "objcopy.exe"))
+C_AS = _tool("as", "HATCH_AS", os.path.join(_BIN, "as.exe"))
 
 BOCHS = _tool("bochs", "HATCH_BOCHS", r"C:\software\Bochs-3.0\bochs.exe")
 BOCHS_SHARE = r"C:\software\Bochs-3.0"
