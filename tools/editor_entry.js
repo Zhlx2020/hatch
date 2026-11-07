@@ -39,6 +39,21 @@ import { KEYWORDS, LIBRARY, PREPROCESSOR, TYPES, documentWords } from "./clike.j
 import { WORDS, DIRECTIVES } from "./nasm_words.js";
 
 const LABEL = /^[A-Za-z_.$][\w.$]*:/;
+const WORD_AT = /[A-Za-z_.$][\w.$]*/g;
+
+function wordAt(state, pos) {
+  const line = state.doc.lineAt(pos);
+  WORD_AT.lastIndex = 0;
+  let match;
+  let first = "";
+  while ((match = WORD_AT.exec(line.text))) {
+    const from = line.from + match.index;
+    if (pos >= from && pos <= from + match[0].length) return match[0];
+    // 光标停在缩进里时，取这一行的第一个词
+    if (!first && pos <= from) first = match[0];
+  }
+  return first;
+}
 const NUMBER = /^(?:0x[0-9a-fA-F]+|\d+|0b[01]+)/;
 const IDENT = /^[A-Za-z_.$][\w.$]*/;
 
@@ -321,7 +336,7 @@ function langSupport(kind) {
   ];
 }
 
-export function create(parent, { onSave, onChange, onToggleLine } = {}) {
+export function create(parent, { onSave, onChange, onToggleLine, onDeclare, onMark } = {}) {
   const langBox = new Compartment();
   const state = EditorState.create({
     doc: "",
@@ -347,6 +362,8 @@ export function create(parent, { onSave, onChange, onToggleLine } = {}) {
         markers: (view) => view.plugin(bpMarkers)?.markers ?? RangeSet.empty,
         domEventHandlers: {
           mousedown(view, line, ev) {
+            // 只有点在装订线里才算断点，正文里的点击留给别处处理
+            if (ev && ev.target instanceof Element && !ev.target.closest(".cm-gutters")) return false;
             ev.preventDefault();
             if (onToggleLine) onToggleLine(view.state.doc.lineAt(line.from).number);
             return true;
@@ -374,6 +391,32 @@ export function create(parent, { onSave, onChange, onToggleLine } = {}) {
               return true;
             },
           },
+          {
+            key: "F11",
+            preventDefault: true,
+            run: () => {
+              if (onMark) onMark();
+              return true;
+            },
+          },
+          {
+            key: "F12",
+            preventDefault: true,
+            run: (ctx) => {
+              const word = wordAt(ctx.state, ctx.state.selection.main.head);
+              if (word && onDeclare) onDeclare(word);
+              return Boolean(word);
+            },
+          },
+          {
+            key: "Mod-b",
+            preventDefault: true,
+            run: (ctx) => {
+              const word = wordAt(ctx.state, ctx.state.selection.main.head);
+              if (word && onDeclare) onDeclare(word);
+              return Boolean(word);
+            },
+          },
           indentWithTab,
           ...closeBracketsKeymap,
           ...defaultKeymap,
@@ -381,6 +424,12 @@ export function create(parent, { onSave, onChange, onToggleLine } = {}) {
           ...historyKeymap,
         ]),
       ),
+      EditorView.domEventHandlers({
+        mousedown(ev, view) {
+          // 挂在这儿偶尔不触发，真正生效的是下面 view.dom 上的监听
+          return ctrlJump(ev, view);
+        },
+      }),
       EditorView.updateListener.of((update) => {
         if (update.docChanged && onChange) onChange();
       }),
@@ -388,6 +437,21 @@ export function create(parent, { onSave, onChange, onToggleLine } = {}) {
   });
 
   const view = new EditorView({ state, parent });
+
+  // Ctrl/Cmd+点击 ⇒ 跳声明。捕获阶段拦，免得先被选区逻辑吃掉
+  function ctrlJump(ev, from) {
+    if (!ev.ctrlKey && !ev.metaKey) return false;
+    if (ev.button !== 0) return false;
+    const at = from.posAtCoords({ x: ev.clientX, y: ev.clientY });
+    const word = at == null ? "" : wordAt(from.state, at);
+    if (at == null) return false;
+    if (!word) return false;
+    ev.preventDefault();
+    ev.stopPropagation();
+    if (onDeclare) onDeclare(word);
+    return true;
+  }
+  view.dom.addEventListener("mousedown", (ev) => ctrlJump(ev, view), true);
 
   return {
     getValue: () => view.state.doc.toString(),
@@ -409,6 +473,32 @@ export function create(parent, { onSave, onChange, onToggleLine } = {}) {
     },
     setBreakpoints(lines) {
       view.dispatch({ effects: setBps.of([...(lines || [])]) });
+    },
+    find(text) {
+      for (let n = 1; n <= view.state.doc.lines; n += 1) {
+        const at = view.state.doc.line(n).text.indexOf(text);
+        if (at >= 0) return { line: n, col: at };
+      }
+      return null;
+    },
+    spot(line, col) {
+      const info = view.state.doc.line(Math.min(Math.max(line, 1), view.state.doc.lines));
+      const rect = view.coordsAtPos(info.from + Math.min(col + 1, info.length));
+      return rect ? { x: Math.round(rect.left), y: Math.round(rect.top + 6) } : null;
+    },
+    line() {
+      const head = view.state.selection.main.head;
+      return view.state.doc.lineAt(head).number;
+    },
+    lineText() {
+      const head = view.state.selection.main.head;
+      return view.state.doc.lineAt(head).text.trim();
+    },
+    goto(line) {
+      const info = view.state.doc.line(Math.min(Math.max(line, 1), view.state.doc.lines));
+      const indent = info.text.length - info.text.trimStart().length;
+      view.dispatch({ selection: { anchor: info.from + indent }, scrollIntoView: true });
+      view.focus();
     },
     scrollTo(line) {
       try {

@@ -46,11 +46,13 @@
   <h2>文件 <button id="new-file" class="mini">＋</button><button id="new-dir" class="mini">＋目录</button><button id="del-file" class="mini">－</button></h2>
   <div class="body" id="tree"></div>
   <div id="tree-menu"></div>
+  <h2 class="sub">书签 <span id="mark-count" class="tag">0</span><button id="mark-add" class="mini" title="给光标这一行加书签（F11）">★</button><button id="mark-clear" class="mini" title="清空书签">清空</button></h2>
+  <div class="body" id="marks"></div>
 </section>
 
 <section id="editor" class="pane">
   <h2><span id="file-title">—</span></h2>
-  <div class="body" id="editor-body"><div id="editor-host"></div><div id="problems"></div></div>
+  <div class="body" id="editor-body"><div id="editor-host"></div><div id="declare"></div><div id="problems"></div></div>
 </section>
 
 <aside>

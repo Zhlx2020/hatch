@@ -38,6 +38,13 @@ OS 开发最烦的不是写不出那几十行汇编，而是**验证一次要切
 
 ![ELF 结构](docs/shot-elf.jpg)
 
+**名字上按 Ctrl 就跳过去**：光标停在函数、宏、类型或者 `call`/`jmp` 的标签上，F12（或 Ctrl+B、Ctrl+点击）直接跳到声明；有一处以上就先列出来挑，定义永远排在声明前面，同级里本文件排最前。纯文本找，不用先编译，写一半的文件也能跳。
+
+**书签跨文件**：F11 给当前行打一条，左下角书签栏一直留着，点一条就跳到那个文件的对应行。文件不在了那条会灰掉划掉但不丢，清空按钮在栏头。
+
+![跳声明与书签](docs/shot-jump.jpg)
+
+
 
 **文件树是正经对话框**：新建时按扩展名标出语言，重名、非法字符、保留名当场提示；删除目录会先说清楚连带删几项。
 
@@ -129,7 +136,7 @@ templ/         代码模板
 tests/         单元与端到端
 ```
 
-分层与数据流见 [docs/architecture.md](docs/architecture.md)，文件规则见 [docs/workspace.md](docs/workspace.md)，C 工程见 [docs/c.md](docs/c.md)，布局与 ELF 视图见 [docs/inspect.md](docs/inspect.md)，设计取舍见 [docs/decisions](docs/decisions)。
+分层与数据流见 [docs/architecture.md](docs/architecture.md)，文件规则见 [docs/workspace.md](docs/workspace.md)，C 工程见 [docs/c.md](docs/c.md)，跳声明与书签见 [docs/editor.md](docs/editor.md)，布局与 ELF 视图见 [docs/inspect.md](docs/inspect.md)，设计取舍见 [docs/decisions](docs/decisions)。
 
 ## 已知限制
 

@@ -19,7 +19,53 @@ header .title { color: var(--dim); letter-spacing: .12em; margin-right: auto; }
 #status { color: var(--dim); }
 #status.bad { color: var(--danger); }
 
+#files { display: flex; flex-direction: column; min-height: 0; }
 #files .body { padding: 6px 4px; user-select: none; font-size: 13px; }
+#files #tree { flex: 1 1 auto; overflow: auto; min-height: 80px; }
+#files h2.sub {
+  border-top: 1px solid var(--edge);
+  padding-top: 4px;
+  flex: 0 0 auto;
+}
+#marks { flex: 0 0 auto; max-height: 34%; overflow: auto; user-select: none; }
+#marks .empty { margin: 4px 2px; color: var(--dim); font-size: 11.5px; line-height: 1.5; }
+#marks .mark {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  padding: 2px 4px;
+  border-radius: 3px;
+  overflow: hidden;
+}
+#marks .mark:hover { background: #ffffff0a; }
+#marks .mark .at {
+  flex: 0 0 auto;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font-family: Consolas, monospace;
+  font-size: 11.5px;
+  padding: 0;
+  cursor: pointer;
+}
+#marks .mark .text {
+  flex: 1 1 auto;
+  color: var(--dim);
+  font-size: 11.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#marks .mark .drop {
+  flex: 0 0 auto;
+  border: 0;
+  background: transparent;
+  color: #5c6a73;
+  cursor: pointer;
+  padding: 0 2px;
+}
+#marks .mark .drop:hover { color: #f3a0a0; }
+#marks .mark.missing .at { color: #d2686b; text-decoration: line-through; }
 #tree .row {
   display: flex;
   align-items: center;
@@ -106,7 +152,7 @@ aside {
 }
 #panels .pane:first-child { grid-row: span 2; }
 
-#editor-body { display: flex; flex-direction: column; min-height: 0; }
+#editor-body { display: flex; flex-direction: column; min-height: 0; position: relative; }
 #editor-host { flex: 1; min-height: 0; overflow: hidden; }
 #editor-host .cm-editor { height: 100%; }
 #editor-host .cm-scroller { scrollbar-width: none; }

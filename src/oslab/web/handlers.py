@@ -6,7 +6,8 @@ from aiohttp import web
 
 from .. import config
 from ..core.errors import OsLabError
-from ..services import checker, diskmap, elfview, settings, templates, workspace
+from ..services import (bookmarks, checker, diskmap, elfview, settings, symbols,
+                        templates, workspace)
 from . import state as shared
 
 
@@ -223,6 +224,40 @@ async def cont(_request):
 
 async def serial(_request):
     return web.json_response({"text": await asyncio.to_thread(session().serial_tail)})
+
+
+async def marks_get(_request):
+    return web.json_response({"marks": await asyncio.to_thread(bookmarks.load)})
+
+
+async def marks_toggle(request):
+    body = await request.json()
+    try:
+        out = await asyncio.to_thread(bookmarks.toggle, body)
+    except OsLabError as exc:
+        return web.json_response({"error": str(exc)}, status=400)
+    return web.json_response(out)
+
+
+async def marks_del(request):
+    body = await request.json()
+    try:
+        out = await asyncio.to_thread(bookmarks.remove, body)
+    except OsLabError as exc:
+        return web.json_response({"error": str(exc)}, status=400)
+    return web.json_response(out)
+
+
+async def declare(request):
+    """光标下的名字在哪声明：C 找函数/宏/类型，汇编找标签。"""
+    body = await request.json()
+    path = workspace.safe(str(body.get("path") or ""))
+    word = str(body.get("word") or "").strip()
+    try:
+        data = await asyncio.to_thread(symbols.declarations, path, word)
+    except OsLabError as exc:
+        return web.json_response({"error": str(exc)}, status=400)
+    return web.json_response(data)
 
 
 async def disk(_request):

@@ -27,6 +27,11 @@ async def post(session, path, body=None):
         return resp.status, await resp.json()
 
 
+async def delete(session, path, body=None):
+    async with session.delete(BASE + path, json=body or {}) as resp:
+        return resp.status, await resp.json()
+
+
 async def get(session, path):
     async with session.get(BASE + path) as resp:
         if resp.content_type == "application/json":
@@ -216,6 +221,39 @@ async def main():
               str(layout.get("marks"))[:80])
         status, bad = await get(session, "/api/disk")
         check("布局带签名检查结论", status == 200 and isinstance(layout.get("warnings"), list))
+
+        status, jump = await post(session, "/api/declare",
+                                  {"path": STAMP + "-c/src/kmain.c", "word": "screen_clear"})
+        where = [(row["file"], row["line"]) for row in jump.get("hits") or []]
+        check("函数能跳声明", status == 200 and where
+              and where[0][0].endswith("screen.c"), str(where)[:80])
+        check("定义排在声明前面", (jump["hits"][0].get("def") if where else False) is True)
+        status, label = await post(session, "/api/declare",
+                                   {"path": "boot/main.asm", "word": "start"})
+        check("汇编标签能跳", status == 200 and (label.get("hits") or [{}])[0].get("line") == 6,
+              str(label)[:80])
+        status, none = await post(session, "/api/declare",
+                                  {"path": "boot/main.asm", "word": "mov"})
+        check("跳不到的给空表", status == 200 and none.get("hits") == [])
+
+        status, marked = await post(session, "/api/bookmarks",
+                                    {"file": "boot/main.asm", "line": 3, "text": "jmp start"})
+        check("能加书签", status == 200 and marked.get("on") is True
+              and marked["marks"][0]["line"] == 3, str(marked)[:80])
+        status, listed = await get(session, "/api/bookmarks")
+        mine = [row for row in listed.get("marks") or [] if row["file"] == "boot/main.asm"]
+        check("书签能列出来", status == 200 and len(mine) == 1, str(listed)[:80])
+        status, again = await post(session, "/api/bookmarks",
+                                   {"file": "boot/main.asm", "line": 3})
+        check("再点一次就取消", status == 200 and again.get("on") is False
+              and not [row for row in again.get("marks") or []
+                       if row["file"] == "boot/main.asm"])
+        await post(session, "/api/bookmarks", {"file": "boot/main.asm", "line": 3})
+        status, dropped = await delete(session, "/api/bookmarks",
+                                       {"file": "boot/main.asm", "line": 3})
+        check("书签能删", status == 200
+              and not [row for row in dropped.get("marks") or []
+                       if row["file"] == "boot/main.asm"], str(dropped)[:80])
 
         status, info = await get(session, "/api/elf")
         names = [row.get("name") for row in info.get("sections") or []]

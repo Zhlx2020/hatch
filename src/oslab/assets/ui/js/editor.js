@@ -1,9 +1,11 @@
 import * as api from "./api.js";
+import * as marks from "./marks.js";
 import { create } from "/ui/vendor/editor.bundle.js";
 
 const hostEl = document.getElementById("editor-host");
 const titleEl = document.getElementById("file-title");
 const problemsEl = document.getElementById("problems");
+const declareEl = document.getElementById("declare");
 
 let current = "";
 let saveTimer = null;
@@ -20,6 +22,12 @@ const view = create(hostEl, {
   onToggleLine: (line) => {
     toggleLine(line);
   },
+  onMark: () => {
+    marks.add().then((out) => {
+      if (out && out.error) titleEl.textContent = out.error;
+    });
+  },
+  onDeclare: (word) => jump(word),
   onSave: (run) => {
     flush().then((result) => {
       if (run && current && (!result || result.ok !== false)) {
@@ -28,6 +36,90 @@ const view = create(hostEl, {
     });
   },
 });
+
+// 跳声明：一个落点直接过去，多个先列出来选
+let chooser = null;
+
+function closeChoice() {
+  if (!chooser) return;
+  declareEl.classList.remove("open");
+  declareEl.textContent = "";
+  chooser = null;
+}
+
+function offer(word, hits) {
+  closeChoice();
+  chooser = hits;
+  declareEl.textContent = "";
+  const head = document.createElement("div");
+  head.className = "head";
+  head.textContent = "「" + word + "」在 " + hits.length + " 处有声明，挑一处：";
+  declareEl.append(head);
+  hits.forEach((hit, index) => {
+    const row = document.createElement("button");
+    row.className = "hit";
+    row.append(Object.assign(document.createElement("span"), {
+      className: "where", textContent: hit.file + ":" + hit.line,
+    }));
+    row.append(Object.assign(document.createElement("span"), {
+      className: "kind", textContent: hit.kind,
+    }));
+    row.append(Object.assign(document.createElement("span"), {
+      className: "text", textContent: hit.text,
+    }));
+    row.addEventListener("click", () => {
+      closeChoice();
+      go(hit.file, hit.line);
+    });
+    if (index === 0) row.classList.add("first");
+    declareEl.append(row);
+  });
+  const foot = document.createElement("div");
+  foot.className = "foot";
+  foot.textContent = "Esc 关掉";
+  declareEl.append(foot);
+  declareEl.classList.add("open");
+}
+
+async function jump(word) {
+  if (!current || dead || !word) return;
+  await flush();
+  const out = await api.declare(current, word);
+  if (out.error) {
+    titleEl.textContent = out.error;
+    return;
+  }
+  const hits = out.hits || [];
+  if (!hits.length) {
+    problemsEl.textContent = "";
+    const row = document.createElement("div");
+    row.className = "problem";
+    row.textContent = "没找到「" + word + "」的声明";
+    problemsEl.append(row);
+    problemsEl.classList.add("open");
+    return;
+  }
+  if (hits.length === 1) {
+    if (hits[0].file === current) view.goto(hits[0].line);
+    else go(hits[0].file, hits[0].line);
+    return;
+  }
+  offer(out.word || word, hits);
+}
+
+/** 到另一个文件的某一行去；由 boot 提供 tree.open，跳完还把树选中。 */
+let opener = null;
+
+export function installOpen(fn) {
+  opener = fn;
+}
+
+async function go(path, line) {
+  closeChoice();
+  if (!opener) return;
+  await opener(path);
+  view.goto(line);
+}
 
 function markDirty() {
   titleEl.textContent = current ? current + " *" : "—";
@@ -161,9 +253,32 @@ export function file() {
   return current;
 }
 
+window.__editorGoto = (line) => view.goto(line);
+// 调试用：某段文字在屏幕上的坐标，探针点它
+window.__editorSpot = (text) => {
+  const at = view.find(text);
+  return at ? view.spot(at.line, at.col) : null;
+};
+window.__editorHere = () => ({ path: current, line: view.line(), text: view.lineText() });
+
 export function install() {
   document.addEventListener("keydown", (ev) => {
-    if (ev.key === "Escape") view.markLine(0);
+    if (ev.key === "Escape") {
+      if (chooser) closeChoice();
+      view.markLine(0);
+    }
+    if (ev.key === "Enter" && chooser) {
+      const first = chooser[0];
+      if (first) {
+        ev.preventDefault();
+        if (first.file === current) {
+          closeChoice();
+          view.goto(first.line);
+        } else {
+          go(first.file, first.line);
+        }
+      }
+    }
   });
 }
 

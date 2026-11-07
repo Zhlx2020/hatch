@@ -4,6 +4,7 @@ import * as detail from "./detail.js";
 import * as editor from "./editor.js";
 import * as settings from "./settings.js";
 import * as hint from "./hint.js";
+import * as marks from "./marks.js";
 import * as input from "./input.js";
 import * as panels from "./panels.js";
 import * as screen from "./screen.js";
@@ -234,6 +235,14 @@ for (const box of ["regs", "mem", "disasm"]) {
   document.getElementById(box).addEventListener("dblclick", () => detail.open(
     box === "disasm" ? "dis" : box));
 }
+editor.installOpen(async (path) => {
+  await tree.open(path);
+});
+marks.install({ open: async (path, line) => {
+  await tree.open(path);
+  editor.markLine(line);
+  window.__editorGoto?.(line);
+} });
 document.getElementById("step").addEventListener("click", () => guarded(api.step));
 document.getElementById("step-over").addEventListener("click", () => guarded(api.stepOver));
 document.getElementById("pause").addEventListener("click", () => guarded(api.pause));

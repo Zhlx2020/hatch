@@ -57,6 +57,15 @@ export const line = (path, row) =>
 export const serial = () => json("/api/serial");
 export const settings = () => json("/api/settings");
 export const disk = () => json("/api/disk");
+export const marks = () => json("/api/bookmarks");
+export const toggleMark = (file, line, text) => post("/api/bookmarks", { file, line, text });
+export const dropMark = (file, line) =>
+  json("/api/bookmarks", {
+    method: "DELETE",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ file, line }),
+  });
+export const declare = (path, word) => post("/api/declare", { path, word });
 export const elf = () => json("/api/elf");
 export const saveSettings = (data) =>
   json("/api/settings", {
