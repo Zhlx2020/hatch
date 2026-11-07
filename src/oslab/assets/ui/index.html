@@ -21,16 +21,24 @@
     <button id="run" class="primary">运行</button>
     <button id="run-more" class="primary" title="更多启动方式">▾</button>
     <div id="run-menu">
-      <div id="run-list" class="group"></div>
-      <button data-act="new-config">新建配置…</button>
-      <button data-act="edit-config">编辑当前配置…</button>
+      <div id="run-knobs">
+        <div class="seg" id="run-action">
+          <button data-do="run" class="on">构建并运行</button>
+          <button data-do="build">只构建</button>
+        </div>
+        <label class="check"><input id="run-pause" type="checkbox" /><span>启动后停在入口</span></label>
+        <label class="knob"><span>按钮文字</span><input id="run-label" maxlength="12" /></label>
+        <label class="knob"><span>悬停提示</span><input id="run-hint" maxlength="80" /></label>
+        <label class="knob"><span>启动模板</span><select id="run-profile"></select></label>
+        <div id="run-facts"></div>
+        <label class="knob"><span>附加参数</span><input id="run-extra" placeholder="-no-reboot -smp 2" /></label>
+        <div id="run-note" class="dim"></div>
+      </div>
       <hr>
-      <button data-act="build">只构建</button>
       <button data-act="reset">软复位（回复位向量）</button>
       <button data-act="reboot">重新构建并启动</button>
       <button data-act="disk">看磁盘布局</button>
       <button data-act="elf">看 ELF 结构</button>
-      <button data-act="settings">启动设置…</button>
     </div>
   </div>
   <button id="pause">暂停</button>
@@ -38,7 +46,6 @@
   <button id="step">单步</button>
   <button id="step-over">越过</button>
   <button id="reset">复位</button>
-  <button id="gear" class="mini" title="设置">设置</button>
   <span id="status">待机</span>
 </header>
 
@@ -72,22 +79,6 @@
     <button id="templates-close">关闭</button>
   </div>
   <div id="templates-body"></div>
-</div>
-
-<div id="settings">
-  <div id="settings-tabs">
-    <button data-tab="run">启动按钮</button>
-    <button data-tab="qemu">QEMU</button>
-    <span class="grow"></span>
-    <button id="settings-close">关闭</button>
-  </div>
-  <div id="settings-body"></div>
-  <div id="settings-foot">
-    <span id="settings-note">改完重启会话后生效</span>
-    <span class="grow"></span>
-    <button id="settings-reset" class="extra">恢复默认</button>
-    <button id="settings-save" class="primary">保存</button>
-  </div>
 </div>
 
 <div id="detail">

@@ -60,131 +60,11 @@ async function refresh() {
   }
 }
 
-// 运行配置：菜单里挑一份，或者就地编辑/新建一份，跟 IDE 的 run configuration 一样
-function summary(item) {
-  const profile = (settings.current().profiles || []).find((one) => one.id === item.profile);
-  const extra = (item.extra || []).length;
-  return [item.pause_at_entry ? "停在入口" : "入口不停",
-    item.action === "build" ? "只构建" : "", profile ? profile.name : item.profile,
-    extra ? "附加参数 " + extra + " 项" : ""].filter(Boolean).join(" · ");
-}
-
-function paintConfigs() {
-  const box = document.getElementById("run-list");
-  const data = settings.current();
-  box.innerHTML = "";
-  for (const item of data.runs || []) {
-    const row = document.createElement("button");
-    row.type = "button";
-    row.className = "config" + (item.name === data.active ? " on" : "");
-    row.dataset.config = item.name;
-    row.innerHTML = `<span class="tick">${item.name === data.active ? "✓" : ""}</span>`
-      + `<span class="nm"></span><span class="meta"></span>`;
-    row.querySelector(".nm").textContent = item.name;
-    row.querySelector(".meta").textContent = summary(item);
-    box.append(row);
-  }
-}
-
-async function pickConfig(name) {
-  const out = await api.saveSettings({ ...settings.current(), active: name });
-  if (out && out.error) {
-    say(out.error, true);
-    return false;
-  }
-  await settings.load();
-  paintConfigs();
-  return true;
-}
-
-async function editConfig(mode) {
-  document.getElementById("run-menu").classList.remove("open");
-  const data = settings.current();
-  const runs = data.runs || [];
-  const creating = mode === "new";
-  const source = creating
-    ? { ...runs.find((one) => one.name === data.active), name: uniqueName(runs) }
-    : runs.find((one) => one.name === data.active);
-  if (!source) return;
-  const others = new Set(runs.filter((one) => one.name !== source.name).map((one) => one.name));
-  const out = await dialog.open({
-    title: creating ? "新建运行配置" : "编辑运行配置",
-    sub: creating ? "与当前配置同样的设置起步" : "配置：" + source.name,
-    tone: "file",
-    confirm: "保存",
-    fields: [
-      { name: "name", label: "配置名", value: source.name, mono: false,
-        check: (value) => {
-          const name = value.trim();
-          if (!name) return "配置名不能为空";
-          if (others.has(name)) return "已经有同名的配置";
-          if (name.length > 20) return "最多 20 字";
-          return "";
-        } },
-      { name: "label", label: "按钮文字", value: source.label, mono: false,
-        check: (value) => (value.trim() ? "" : "按钮上得有字") },
-      { name: "hint", label: "悬停提示", value: source.hint, mono: false },
-      { name: "action", label: "点一下做什么", kind: "select", value: source.action,
-        options: [{ value: "run", label: "构建并运行" }, { value: "build", label: "只构建" }] },
-      { name: "pause_at_entry", label: "启动后立刻停在入口", kind: "check",
-        value: source.pause_at_entry },
-      { name: "profile", label: "QEMU 模板", kind: "select", value: source.profile,
-        options: (data.profiles || []).map((one) => ({ value: one.id, label: one.name })) },
-      { name: "extra", label: "附加参数", value: (source.extra || []).join(" "),
-        placeholder: "-no-reboot -smp 2" },
-    ],
-    note: runs.length > 1 || creating ? "" : "至少要留一份配置。",
-    extra: runs.length > 1
-      ? [{ text: "删除这份", act: "delete" }] : [],
-    onExtra: async (act) => {
-      if (act !== "delete") return;
-      const left = runs.filter((one) => one.name !== source.name);
-      const next = left.some((one) => one.name === data.active) ? data.active : left[0].name;
-      const res = await api.saveSettings({ runs: left, active: next });
-      if (res.error) return say(res.error, true);
-      await settings.load();
-      paintConfigs();
-      say("已删除配置 " + source.name);
-    },
-    onsubmit: async (values) => {
-      const item = {
-        name: values.name.trim(),
-        label: values.label.trim(),
-        hint: values.hint.trim(),
-        action: values.action,
-        pause_at_entry: Boolean(values.pause_at_entry),
-        profile: values.profile,
-        extra: values.extra ? values.extra.split(/\s+/).filter(Boolean) : [],
-      };
-      const list = creating ? [...runs, item]
-        : runs.map((one) => (one.name === source.name ? item : one));
-      const res = await api.saveSettings({ runs: list, active: item.name });
-      if (res.error) return { error: res.error };
-      await settings.load();
-      paintConfigs();
-      say((creating ? "已新建配置 " : "已保存配置 ") + item.name);
-      return item;
-    },
-  });
-  if (out) await boot();
-}
-
-function uniqueName(runs) {
-  for (let index = 1; index < 100; index += 1) {
-    const name = "配置 " + index;
-    if (!runs.some((one) => one.name === name)) return name;
-  }
-  return "配置";
-}
-
 async function runAction(act) {
   document.getElementById("run-menu").classList.remove("open");
-  if (act === "settings") return settings.open();
   if (act === "disk" || act === "elf") return detail.open(act);
   if (act === "reset") return guarded(api.reset);
-  if (act === "build") return boot(true);
-  if (act === "new-config") return editConfig("new");
-  if (act === "edit-config") return editConfig("edit");
+  if (act === "reboot") return boot();
   return boot();
 }
 
@@ -224,16 +104,10 @@ document.getElementById("run").addEventListener("click", () => runAction("main")
 document.getElementById("run-more").addEventListener("click", (ev) => {
   ev.stopPropagation();
   const menu = document.getElementById("run-menu");
-  if (!menu.classList.contains("open")) paintConfigs();
+  if (!menu.classList.contains("open")) settings.paint();
   menu.classList.toggle("open");
 });
-document.getElementById("run-menu").addEventListener("click", async (ev) => {
-  const config = ev.target.closest("button[data-config]");
-  if (config) {
-    document.getElementById("run-menu").classList.remove("open");
-    if (await pickConfig(config.dataset.config)) await boot();
-    return;
-  }
+document.getElementById("run-menu").addEventListener("click", (ev) => {
   const item = ev.target.closest("button[data-act]");
   if (item) runAction(item.dataset.act);
 });

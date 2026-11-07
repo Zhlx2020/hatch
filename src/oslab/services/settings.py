@@ -17,9 +17,6 @@ RUN = {
     "action": "run",          # run | build
     "pause_at_entry": True,
 }
-DEFAULT_NAME = "默认"
-MAX_RUNS = 12
-MAX_NAME = 20
 # 模板：id -> 名字、说明、固定参数。参数里的 %s 是镜像路径。
 PROFILES = {
     "floppy": {
@@ -191,140 +188,83 @@ def screen_of(name):
     return item["screen"]
 
 
-def _new_config(name=DEFAULT_NAME):
-    return {"name": name, "label": RUN["label"], "hint": "", "action": "run",
-            "pause_at_entry": True, "profile": DEFAULT_PROFILE, "extra": []}
-
-
-def _clean_config(raw, fallback=None):
-    """一份运行配置：按钮长什么样 + 该用哪个模板，逐项校验。"""
-    base = dict(fallback or _new_config())
-    name = str(raw.get("name", base["name"])).strip() or base["name"]
-    if len(name) > MAX_NAME:
-        raise OsLabError("配置名最多 %d 字" % MAX_NAME)
-    label = str(raw.get("label", base["label"])).strip() or RUN["label"]
-    hint = str(raw.get("hint", base["hint"])).strip()
-    action = raw.get("action", base["action"])
+def _clean_run(raw):
+    """按钮上的那几项，逐项校验。"""
+    label = str(raw.get("label", RUN["label"])).strip() or RUN["label"]
+    hint = str(raw.get("hint", "")).strip()
+    action = raw.get("action", RUN["action"])
     if action not in ("run", "build"):
         raise OsLabError("按钮动作只能是 run 或 build")
-    pause = raw.get("pause_at_entry", base["pause_at_entry"])
+    pause = raw.get("pause_at_entry", RUN["pause_at_entry"])
     if not isinstance(pause, bool):
         raise OsLabError("入口暂停必须是真假值")
-    profile = raw.get("profile", base["profile"])
+    return {"label": label[:12], "hint": hint[:80], "action": action,
+            "pause_at_entry": pause}
+
+
+def _clean_qemu(raw):
+    profile = raw.get("profile", QEMU["profile"])
     if profile not in PROFILES:
         raise OsLabError("没有这个模板：%s" % profile)
-    extra = raw.get("extra", base["extra"])
-    return {"name": name, "label": label[:12], "hint": hint[:80], "action": action,
-            "pause_at_entry": pause, "profile": profile,
-            "extra": check_extra(extra) if isinstance(extra, list) else []}
-
-
-def _view(runs, active):
-    """对外的一份快照：当前配置铺平成 run/qemu，另外附上清单。"""
-    chosen = next((item for item in runs if item["name"] == active), runs[0])
-    return {
-        "runs": [dict(item) for item in runs],
-        "active": chosen["name"],
-        "run": {"label": chosen["label"], "hint": chosen["hint"],
-                "action": chosen["action"], "pause_at_entry": chosen["pause_at_entry"]},
-        "qemu": {"profile": chosen["profile"], "extra": list(chosen["extra"])},
-    }
+    extra = raw.get("extra", [])
+    return {"profile": profile, "extra": check_extra(extra) if isinstance(extra, list) else []}
 
 
 def load(base=None):
-    runs = []
-    active = DEFAULT_NAME
+    data = {"run": dict(RUN), "qemu": dict(QEMU)}
     name = _path(base)
-    if os.path.exists(name):
+    if not os.path.exists(name):
+        return data
+    try:
+        with open(name, "rb") as fh:
+            raw = tomllib.load(fh)
+    except (OSError, tomllib.TOMLDecodeError):
+        return data
+
+    run, qemu = raw.get("run"), raw.get("qemu")
+    legacy = next((item for item in raw.get("runs") or []
+                   if isinstance(item, dict) and item.get("name") == raw.get("active")),
+                  None)
+    if legacy is None and isinstance(raw.get("runs"), list):
+        legacy = next((item for item in raw["runs"]
+                       if isinstance(item, dict) and "label" in item), None)
+    if legacy is not None:          # 老文件是 [[runs]] + active：搬成一份
+        run = {key: legacy[key] for key in RUN if key in legacy} if run is None else run
+        qemu = legacy if qemu is None else qemu
+    for value, target, clean in ((run, "run", _clean_run), (qemu, "qemu", _clean_qemu)):
+        if not isinstance(value, dict):
+            continue
         try:
-            with open(name, "rb") as fh:
-                raw = tomllib.load(fh)
-        except (OSError, tomllib.TOMLDecodeError):
-            raw = {}
-        for item in raw.get("runs") or []:
-            if not isinstance(item, dict):
-                continue
-            try:
-                runs.append(_clean_config(item))
-            except OsLabError:
-                continue
-        if not runs and isinstance(raw.get("run"), dict):
-            # 老文件只有一份 [run]/[qemu]：搬成「默认」这一份
-            legacy = _new_config()
-            legacy.update({k: v for k, v in (raw.get("qemu") or {}).items()
-                           if k in ("profile", "extra")})
-            try:
-                runs.append(_clean_config(raw["run"], legacy))
-            except OsLabError:
-                runs = []
-        if isinstance(raw.get("active"), str) and any(
-                item["name"] == raw["active"] for item in runs):
-            active = raw["active"]
-    if not runs:
-        runs = [_new_config()]
-    seen, unique = set(), []
-    for item in runs:
-        while item["name"] in seen:
-            item["name"] += "2"
-        seen.add(item["name"])
-        unique.append(item)
-    return _view(unique, active)
+            data[target] = clean(value)
+        except OsLabError:
+            pass
+    return data
 
 
 def save(raw, base=None):
     """Validate then persist; raises with a readable reason when refused."""
-    current = load(base)
-    runs = current["runs"]
-    active = current["active"]
-
-    if "runs" in raw:
-        items = raw["runs"]
-        if not isinstance(items, list):
-            raise OsLabError("配置列表要写成数组")
-        if not items:
-            raise OsLabError("至少留一份配置")
-        if len(items) > MAX_RUNS:
-            raise OsLabError("配置最多 %d 份" % MAX_RUNS)
-        runs, names = [], set()
-        for item in items:
-            if not isinstance(item, dict):
-                raise OsLabError("每份配置要写成对象")
-            cleaned = _clean_config(item)
-            if cleaned["name"] in names:
-                raise OsLabError("配置名重复：%s" % cleaned["name"])
-            names.add(cleaned["name"])
-            runs.append(cleaned)
-
-    wanted = raw.get("active", active)
-    if not any(item["name"] == wanted for item in runs):
-        raise OsLabError("没有这份配置：%s" % wanted)
-
-    # 设置面板是按字段改当前这一份的，允许只给 run/qemu
-    run = raw.get("run") or {}
-    qemu = raw.get("qemu") or {}
-    if run or qemu:
-        target = next(item for item in runs if item["name"] == wanted)
-        merged = dict(target)
-        merged.update({key: value for key, value in run.items() if key in RUN})
-        merged.update({key: value for key, value in qemu.items() if key in ("profile", "extra")})
-        runs[runs.index(target)] = _clean_config(merged, target)
-
-    data = {"runs": runs, "active": wanted}
+    data = load(base)
+    run, qemu = raw.get("run"), raw.get("qemu")
+    if isinstance(run, dict):
+        data["run"] = _clean_run({**data["run"], **run})
+    if isinstance(qemu, dict):
+        data["qemu"] = _clean_qemu({**data["qemu"], **qemu})
     write(data, base)
-    return _view(runs, wanted)
+    return data
 
 
 def write(data, base=None):
-    lines = ["# 由界面写入，可手工编辑", 'active = "%s"' % _esc(data["active"])]
-    for item in data["runs"]:
-        lines += ["", "[[runs]]",
-                  'name = "%s"' % _esc(item["name"]),
-                  'label = "%s"' % _esc(item["label"]),
-                  'hint = "%s"' % _esc(item["hint"]),
-                  'action = "%s"' % item["action"],
-                  "pause_at_entry = %s" % ("true" if item["pause_at_entry"] else "false"),
-                  'profile = "%s"' % item["profile"],
-                  "extra = [%s]" % ", ".join('"%s"' % _esc(one) for one in item["extra"])]
+    run, qemu = data["run"], data["qemu"]
+    lines = ["# 由界面写入，可手工编辑",
+             "[run]",
+             'label = "%s"' % _esc(run["label"]),
+             'hint = "%s"' % _esc(run["hint"]),
+             'action = "%s"' % run["action"],
+             "pause_at_entry = %s" % ("true" if run["pause_at_entry"] else "false"),
+             "",
+             "[qemu]",
+             'profile = "%s"' % qemu["profile"],
+             "extra = [%s]" % ", ".join('"%s"' % _esc(one) for one in qemu["extra"])]
     path = _path(base)
     with open(path, "w", newline="\n", encoding="utf-8") as fh:
         fh.write("\n".join(lines) + "\n")

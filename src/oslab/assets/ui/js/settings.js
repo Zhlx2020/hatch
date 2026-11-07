@@ -1,21 +1,17 @@
 import * as api from "./api.js";
 import * as panels from "./panels.js";
 
-const box = document.getElementById("settings");
-const body = document.getElementById("settings-body");
-const note = document.getElementById("settings-note");
-const saveBtn = document.getElementById("settings-save");
-const resetBtn = document.getElementById("settings-reset");
-const gear = document.getElementById("gear");
+// 启动方式的全部字段就挂在运行按钮底下那一层，改哪项当场存哪项
 const runBtn = document.getElementById("run");
+const menu = document.getElementById("run-menu");
+const note = document.getElementById("run-note");
 
 const DEFAULTS = {
   run: { label: "运行", hint: "", action: "run", pause_at_entry: true },
   qemu: { profile: "floppy", extra: [] },
 };
 
-let tab = "run";
-let data = DEFAULTS;
+let data = structuredClone(DEFAULTS);
 let profiles = [];
 
 export function esc(text) {
@@ -23,82 +19,39 @@ export function esc(text) {
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
 }
 
-function paint() {
-  for (const button of box.querySelectorAll("#settings-tabs button[data-tab]")) {
-    button.classList.toggle("on", button.dataset.tab === tab);
-  }
-  body.classList.toggle("wide", false);
-  if (tab === "run") {
-    body.innerHTML = `<p class="acting"></p>` + `
-      <label><span>按钮文字</span>
-        <input id="s-label" type="text" maxlength="12" />
-        <div class="hint">顶栏那个绿色按钮上的字，最多 12 个字</div>
-      </label>
-      <label><span>悬停提示</span>
-        <input id="s-hint" type="text" maxlength="80" />
-        <div class="hint">鼠标停在按钮上时显示</div>
-      </label>
-      <label><span>点一下做什么</span>
-        <select id="s-action">
-          <option value="run">构建并运行</option>
-          <option value="build">只构建</option>
-        </select>
-        <div class="hint">按钮旁边的 ▾ 里还有复位等做法</div>
-      </label>
-      <label class="check"><input id="s-pause" type="checkbox" /><span>启动后立刻停在入口</span></label>
-    `;
-    const acting = body.querySelector(".acting");
-    if (acting) acting.textContent = "正在改配置：" + data.active
-      + "　（▾ 里可以新建、删除、换一份）";
-    document.getElementById("s-label").value = data.run.label;
-    document.getElementById("s-hint").value = data.run.hint;
-    document.getElementById("s-action").value = data.run.action;
-    document.getElementById("s-pause").checked = data.run.pause_at_entry;
-    return;
-  }
-  body.innerHTML = `
-    <label><span>启动模板</span>
-      <select id="s-profile">
-        ${profiles.map((item) => `<option value="${esc(item.id)}">${esc(item.name)}</option>`).join("")}
-      </select>
-    </label>
-    <div class="facts">
-      <div class="facts-desc" id="s-profile-desc"></div>
-      <div class="facts-title">这个模板固定的参数</div>
-      <table class="facts-list" id="s-profile-rows"></table>
-      <div class="facts-foot">这些开关不接受手写；要别的自己在下面加，撞车会被拒。</div>
-    </div>
-    <label><span>附加参数（一行一个）</span>
-      <textarea id="s-extra" spellcheck="false"></textarea>
-      <div class="hint">模板之外的实验用：-no-reboot、-smp 2、-netdev user,id=n0 …</div>
-    </label>
-  `;
-  const pick = document.getElementById("s-profile");
-  pick.value = data.qemu.profile;
-  document.getElementById("s-extra").value = (data.qemu.extra || []).join("\n");
-  const describe = () => {
-    const found = profiles.find((item) => item.id === pick.value);
-    document.getElementById("s-profile-desc").textContent = found ? found.desc : "";
-    document.getElementById("s-profile-rows").innerHTML = found
-      ? (found.rows || []).map((row) => `<tr><th>${esc(row.k)}</th>`
-          + `<td>${esc(row.v)}<code>${esc(row.arg)}</code></td></tr>`).join("")
-      : "";
-  };
-  pick.addEventListener("change", describe);
-  describe();
+export function applyRunButton() {
+  runBtn.textContent = data.run.label || (data.run.action === "build" ? "构建" : "运行");
+  runBtn.title = data.run.hint || "";
 }
 
-function collect() {
-  if (tab === "run") {
-    data.run.label = document.getElementById("s-label").value.trim() || "运行";
-    data.run.hint = document.getElementById("s-hint").value.trim();
-    data.run.action = document.getElementById("s-action").value;
-    data.run.pause_at_entry = document.getElementById("s-pause").checked;
-  } else {
-    data.qemu.profile = document.getElementById("s-profile").value;
-    data.qemu.extra = document.getElementById("s-extra").value
-      .split("\n").map((line) => line.trim()).filter(Boolean);
+function paintFacts() {
+  const box = document.getElementById("run-facts");
+  const found = profiles.find((item) => item.id === data.qemu.profile);
+  if (!found) {
+    box.innerHTML = "";
+    return;
   }
+  box.innerHTML = `<div class="dim">${esc(found.desc)}</div>`
+    + `<table class="facts-list">${(found.rows || []).map((row) =>
+      `<tr><th>${esc(row.k)}</th><td>${esc(row.v)}<code>${esc(row.arg)}</code></td></tr>`)
+      .join("")}</table>`
+    + `<div class="dim">模板固定的参数不接受手写；要别的写在附加参数里，撞车会被拒。</div>`;
+}
+
+// 浮层每次打开都按当前值重画一遍
+export function paint() {
+  for (const button of document.querySelectorAll("#run-action button")) {
+    button.classList.toggle("on", button.dataset.do === data.run.action);
+  }
+  document.getElementById("run-pause").checked = data.run.pause_at_entry;
+  document.getElementById("run-label").value = data.run.label;
+  document.getElementById("run-hint").value = data.run.hint;
+  const pick = document.getElementById("run-profile");
+  pick.innerHTML = profiles.map((item) =>
+    `<option value="${esc(item.id)}">${esc(item.name)}</option>`).join("");
+  pick.value = data.qemu.profile;
+  document.getElementById("run-extra").value = (data.qemu.extra || []).join(" ");
+  paintFacts();
 }
 
 function say(text, bad) {
@@ -106,79 +59,60 @@ function say(text, bad) {
   note.classList.toggle("bad", !!bad);
 }
 
-export function applyRunButton() {
-  runBtn.textContent = data.run.label || (data.run.action === "build" ? "构建" : "运行");
-  runBtn.title = data.run.hint || "";
-}
-
-export async function load() {
-  const out = await api.settings();
-  profiles = out.profiles || [];
-  adopt(out);
-  if (box.classList.contains("open")) paint();
-  return data;
-}
-
 function adopt(out) {
   data = {
-    runs: out.runs || [],
-    active: out.active || "",
     run: { ...DEFAULTS.run, ...(out.run || {}) },
     qemu: { ...DEFAULTS.qemu, ...(out.qemu || {}) },
   };
+  profiles = out.profiles || profiles;
   applyRunButton();
+}
+
+async function put(patch) {
+  const out = await api.saveSettings(patch);
+  if (out.error) {
+    say(out.error, true);
+    await load();
+    paint();
+    return false;
+  }
+  adopt(out);
+  paint();
+  // 模板和附加参数只影响下次开机；按钮长相当场就换
+  say(patch.qemu ? "已保存，下次启动生效" : "已保存");
+  return true;
+}
+
+export function setAction(action) {
+  return put({ run: { action } });
+}
+
+export async function load() {
+  adopt(await api.settings());
+  return data;
 }
 
 export function current() {
   return { ...data, profiles };
 }
 
-export function open() {
-  tab = "run";
-  paint();
-  say("改完保存，重启会话后生效");
-  box.classList.add("open");
-}
-
-function close() {
-  box.classList.remove("open");
-}
-
 export function install() {
-  gear.addEventListener("click", () => {
-    if (box.classList.contains("open")) close();
-    else open();
+  menu.addEventListener("click", (ev) => ev.stopPropagation());
+  document.getElementById("run-action").addEventListener("click", (ev) => {
+    const button = ev.target.closest("button[data-do]");
+    if (button) setAction(button.dataset.do);
   });
-  document.getElementById("settings-close").addEventListener("click", close);
-  for (const button of box.querySelectorAll("#settings-tabs button[data-tab]")) {
-    button.addEventListener("click", () => {
-      collect();
-      tab = button.dataset.tab;
-      paint();
-    });
+  document.getElementById("run-pause").addEventListener("change", (ev) =>
+    put({ run: { pause_at_entry: ev.target.checked } }));
+  for (const [id, key, max] of [["run-label", "label", 12], ["run-hint", "hint", 80]]) {
+    document.getElementById(id).addEventListener("change", (ev) =>
+      put({ run: { [key]: ev.target.value.trim().slice(0, max) } }));
   }
-  saveBtn.addEventListener("click", async () => {
-    collect();
-    const out = await api.saveSettings({ ...data, active: data.active });
-    if (out.error) {
-      say(out.error, true);
-      return;
-    }
-    profiles = out.profiles || profiles;
-    adopt(out);
-    panels.serialMode(out.qemu.profile === "terminal");
-    say("已保存，重启会话后生效");
+  document.getElementById("run-profile").addEventListener("change", async (ev) => {
+    const profile = ev.target.value;
+    if (await put({ qemu: { profile } })) panels.serialMode(profile === "terminal");
   });
-  resetBtn.addEventListener("click", async () => {
-    const out = await api.saveSettings({ ...DEFAULTS, active: data.active });
-    if (out.error) {
-      say(out.error, true);
-      return;
-    }
-    adopt(out);
-    panels.serialMode(out.qemu.profile === "terminal");
-    paint();
-    say("这份配置已恢复默认");
-  });
+  document.getElementById("run-extra").addEventListener("change", (ev) =>
+    put({ qemu: { extra: ev.target.value.split(/\s+/).filter(Boolean) } }));
   load();
 }

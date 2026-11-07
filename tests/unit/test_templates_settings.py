@@ -114,43 +114,39 @@ def test_qemu_command_uses_profile(workdir):
     assert args[-1] == "-S"
     assert "-gdb" in args and "-serial" in args                
 
-def test_runs_start_with_one_default(workdir):
+def test_settings_start_at_defaults(workdir):
     data = settings.load(str(workdir))
-    assert data['active'] == settings.DEFAULT_NAME
-    assert len(data['runs']) == 1
-    assert data['runs'][0]['profile'] == settings.DEFAULT_PROFILE
+    assert data["run"]["label"] == "运行"
+    assert data["run"]["action"] == "run"
+    assert data["qemu"]["profile"] == settings.DEFAULT_PROFILE
 
 
-def test_runs_can_hold_several_and_switch(workdir):
-    data = settings.save({'runs': [
-        {'name': '平时', 'label': '运行', 'profile': 'floppy'},
-        {'name': '冷调试', 'label': '调试', 'profile': 'cold', 'pause_at_entry': False},
-    ], 'active': '冷调试'}, str(workdir))
-    assert data['active'] == '冷调试'
-    assert data['qemu']['profile'] == 'cold'
-    back = settings.load(str(workdir))
-    assert [one['name'] for one in back['runs']] == ['平时', '冷调试']
+def test_button_fields_are_saved_one_by_one(workdir):
+    settings.save({"run": {"label": "构建"}}, str(workdir))
+    data = settings.save({"run": {"action": "build", "pause_at_entry": False}}, str(workdir))
+    assert data["run"]["label"] == "构建"       # 上一次改的没被冲掉
+    assert data["run"]["action"] == "build"
+    assert settings.load(str(workdir))["run"]["pause_at_entry"] is False
 
 
-def test_runs_reject_duplicate_and_empty(workdir):
-    with pytest.raises(OsLabError, match='重复'):
-        settings.save({'runs': [{'name': 'a'}, {'name': 'a'}]}, str(workdir))
-    with pytest.raises(OsLabError, match='至少'):
-        settings.save({'runs': []}, str(workdir))
+def test_bad_values_are_refused(workdir):
+    with pytest.raises(OsLabError, match="run 或 build"):
+        settings.save({"run": {"action": "delete"}}, str(workdir))
+    with pytest.raises(OsLabError, match="真假值"):
+        settings.save({"run": {"pause_at_entry": "yes"}}, str(workdir))
+    with pytest.raises(OsLabError, match="没有这个模板"):
+        settings.save({"qemu": {"profile": "nope"}}, str(workdir))
 
 
-def test_runs_switch_unknown_name_is_refused(workdir):
-    with pytest.raises(OsLabError, match='没有这份配置'):
-        settings.save({'active': '不在'}, str(workdir))
-
-
-def test_old_single_run_file_migrates(workdir):
+def test_multi_run_file_migrates(workdir):
     (pathlib.Path(workdir) / settings.NAME).write_text(
-        '[run]\nlabel = "老"\naction = "build"\n\n[qemu]\nprofile = "cold"\n',
-        encoding='utf-8')
+        'active = "冷档"\n\n[[runs]]\nname = "平时"\nlabel = "运行"\n\n'
+        '[[runs]]\nname = "冷档"\nlabel = "调试"\naction = "build"\nprofile = "cold"\n',
+        encoding="utf-8")
     data = settings.load(str(workdir))
-    assert len(data['runs']) == 1 and data['runs'][0]['label'] == '老'
-    assert data['qemu']['profile'] == 'cold'
+    assert data["run"]["label"] == "调试"
+    assert data["run"]["action"] == "build"
+    assert data["qemu"]["profile"] == "cold"
 
 
 def test_project_no_longer_changes_the_button(workdir):
@@ -161,8 +157,7 @@ def test_project_no_longer_changes_the_button(workdir):
     (root / 'p' / 'a.asm').write_text('bits 16\n', encoding='utf-8')
     saved = settings.load(str(workdir))
     view = settings.with_project(saved, 'p/a.asm', str(workdir))
-    assert view['run']['label'] == saved['runs'][0]['label']
-    assert view['run']['pause_at_entry'] == saved['runs'][0]['pause_at_entry']
+    assert view['run'] == saved['run']
     assert view['from_project'] == 'p'
     assert view['qemu']['profile'] == settings.DEFAULT_PROFILE
 

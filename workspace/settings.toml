@@ -1,11 +1,10 @@
 # 由界面写入，可手工编辑
-active = "默认"
-
-[[runs]]
-name = "默认"
+[run]
 label = "运行"
 hint = "点我就构建并启动"
 action = "run"
 pause_at_entry = true
+
+[qemu]
 profile = "floppy"
 extra = []

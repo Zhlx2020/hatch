@@ -126,70 +126,6 @@
 #detail-body button { font-size: 13px; padding: 3px 9px; }
 #detail-body .reg, #detail-body .memrow, #detail-body .disrow { min-height: 22px; }
 
-#settings {
-  position: fixed;
-  top: 12vh;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 620px;
-  max-height: 70vh;
-  box-sizing: border-box;
-  z-index: 70;
-  display: none;
-  flex-direction: column;
-  padding: 10px;
-  background: var(--panel);
-  border: 1px solid var(--edge);
-  border-radius: 6px;
-  box-shadow: 0 18px 40px #0009;
-}
-#settings.open { display: flex; }
-#settings-tabs {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--edge);
-}
-#settings-tabs .grow,
-#settings-foot .grow { flex: 1; }
-#settings-tabs button { padding: 5px 12px; font-size: 13.5px; }
-#settings-tabs button.on { border-color: var(--accent); color: var(--accent); }
-#settings-body { padding: 12px 2px; overflow: auto; flex: 1 1 auto; min-height: 0; }
-#settings-body .acting {
-  margin: 0 0 10px;
-  font-size: 12.5px;
-  color: var(--accent);
-}
-#settings-body label { display: block; margin-bottom: 12px; font-size: 14px; color: var(--dim); }
-#settings-body label span { display: block; margin-bottom: 4px; }
-#settings-body input[type="text"],
-#settings-body input[type="number"],
-#settings-body textarea {
-  width: 100%;
-  box-sizing: border-box;
-  padding: 6px 8px;
-  font: inherit;
-  font-size: 14px;
-  color: var(--text);
-  background: #0d1216;
-  border: 1px solid var(--edge);
-  border-radius: 4px;
-}
-#settings-body textarea { height: 74px; resize: vertical; }
-#settings-body .hint { color: var(--dim); font-size: 12.5px; margin-top: 4px; }
-#settings-body .check { display: flex; align-items: center; gap: 8px; }
-#settings-body .check input { width: auto; }
-#settings-foot {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding-top: 8px;
-  border-top: 1px solid var(--edge);
-}
-#settings-note { font-size: 12.5px; color: var(--dim); }
-#settings-note.bad { color: #e5534b; }
-
 #templates {
   position: fixed;
   top: 18vh;
@@ -237,7 +173,7 @@
   z-index: 80;
   display: none;
   flex-direction: column;
-  min-width: 168px;
+  min-width: 268px;
   padding: 4px;
   background: var(--panel);
   border: 1px solid var(--edge);
@@ -259,45 +195,47 @@
   border: 0;
   border-top: 1px solid var(--edge);
 }
-#run-menu .group { display: flex; flex-direction: column; }
-#run-menu button.config {
-  display: grid;
-  grid-template-columns: 14px 1fr;
-  gap: 2px 6px;
-  align-items: baseline;
-  min-width: 220px;
+#run-knobs { display: flex; flex-direction: column; gap: 7px; padding: 2px 5px 4px; }
+#run-knobs .dim { color: var(--dim); font-size: 11.5px; line-height: 1.5; }
+#run-knobs .seg { display: flex; gap: 4px; }
+#run-knobs .seg button {
+  flex: 1;
+  text-align: center;
+  padding: 5px 6px;
+  border: 1px solid var(--edge);
+  border-radius: 3px;
+  font-size: 12.5px;
 }
-#run-menu .config .tick { color: var(--accent); font-size: 12px; }
-#run-menu .config .nm { font-size: 13.5px; }
-#run-menu .config .meta {
-  grid-column: 2;
-  color: var(--dim);
-  font-size: 11.5px;
+#run-knobs .seg button.on { border-color: var(--accent); color: var(--accent); }
+#run-knobs .check { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--dim); }
+#run-knobs .knob { display: grid; grid-template-columns: 62px 1fr; align-items: center; gap: 6px; font-size: 12.5px; color: var(--dim); }
+#run-knobs .knob input,
+#run-knobs .knob select {
+  width: 100%;
+  padding: 3px 6px;
+  font-size: 12.5px;
+  background: var(--bg);
+  color: inherit;
+  border: 1px solid var(--edge);
+  border-radius: 3px;
 }
-#run-menu .config.on .nm { color: var(--accent); font-weight: 600; }
+#run-facts:empty { display: none; }
+#run-facts .facts-list { width: 100%; border-collapse: collapse; font-size: 11.5px; margin: 3px 0; }
+#run-facts .facts-list th { text-align: left; color: var(--dim); font-weight: 400; padding: 1px 6px 1px 0; white-space: nowrap; vertical-align: top; }
+#run-facts .facts-list td { color: #8b98a3; padding: 1px 0; }
+#run-facts .facts-list code { display: block; color: #5c6a73; font-size: 10.5px; }
+#run-note { min-height: 15px; }
+#run-note.bad { color: #e5534b; }
 
-/* 模板到底固定了什么，摆成表，别让人猜 */
-#settings .facts {
-  border: 1px solid #1e262e;
-  border-radius: 6px;
-  background: #10151a;
-  padding: 8px 10px 10px;
-}
-#settings .facts-desc { color: #8b98a3; font-size: 12.5px; line-height: 1.5; }
-#settings .facts-title {
-  margin: 8px 0 4px;
-  color: #c6d0d8;
-  font-size: 12px;
-  letter-spacing: .04em;
-}
-#settings .facts-list {
+/* 模板固定了哪些参数，在浮层里摆成表，别让人猜 */
+.facts-list {
   width: 100%;
   border-collapse: collapse;
   font-size: 12.5px;
   table-layout: fixed;
   table-layout: fixed;
 }
-#settings .facts-list th {
+.facts-list th {
   width: 74px;
   padding: 3px 6px 3px 0;
   text-align: left;
@@ -305,13 +243,13 @@
   color: #6f7d88;
   white-space: nowrap;
 }
-#settings .facts-list td {
+.facts-list td {
   padding: 3px 6px 5px 0;
   color: #c6d0d8;
   white-space: normal;
   overflow-wrap: anywhere;
 }
-#settings .facts-list code {
+.facts-list code {
   display: block;
   margin-top: 2px;
   white-space: normal;
@@ -321,7 +259,7 @@
   font-size: 11.5px;
   word-break: break-all;
 }
-#settings .facts-foot { margin-top: 6px; color: #5c6a73; font-size: 11.5px; }
+.facts-foot { margin-top: 6px; color: #5c6a73; font-size: 11.5px; }
 
 /* 磁盘布局与 ELF：条带 + 逐段表 */
 #detail .map {
