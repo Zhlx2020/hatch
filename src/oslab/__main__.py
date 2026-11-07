@@ -7,6 +7,8 @@ import time
 
 from . import config
 from .backend.qemu.process import free_ports
+from .core.errors import OsLabError
+from .services import toolchain
 from .services.session import Session
 from .web import server, state
 
@@ -23,12 +25,41 @@ def instance_taken():
         probe.close()
 
 
+def prepare_tools(auto=True):
+    """缺工具就装上；返回是否备齐。用户机器上可以什么都没有。"""
+    todo = toolchain.missing()
+    if not todo:
+        return True
+    titles = "、".join(toolchain.WINDOWS[name]["title"] for name in todo)
+    print("首次运行，缺 %s，开始下载到 .work/tools（只下一次）" % titles)
+    if not auto:
+        return False
+    try:
+        toolchain.ensure()
+    except OsLabError as exc:
+        print(exc)
+        print("也可以自己装好，用 HATCH_NASM / HATCH_QEMU / HATCH_GCC 指过去")
+        return False
+    print("工具就绪")
+    return True
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(prog="hatch")
+    parser.add_argument("action", nargs="?", choices=["setup", "run"], default="run")
     parser.add_argument("--port", type=int, default=config.PORT)
     parser.add_argument("--serve", action="store_true")
     parser.add_argument("--browser", action="store_true")
     args = parser.parse_args(argv)
+
+    if args.action == "setup":
+        prepare_tools()
+        for name, path, ready in toolchain.report():
+            print("%-18s %s  %s" % (name, "就绪" if ready else "缺失", path))
+        return 0 if not toolchain.missing() else 1
+
+    if not prepare_tools():
+        return 1
 
     if instance_taken():
         print("已有一个 hatch 在运行（端口 %d 被占用）" % config.LOCK_PORT)

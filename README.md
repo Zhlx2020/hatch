@@ -38,23 +38,28 @@ OS 开发最烦的不是写不出那几十行汇编，而是**验证一次要切
 
 ## 快速开始
 
-需要 Python 3.11+，以及这些外装命令（`PATH` 里能找到即可，也可以用 `HATCH_NASM` / `HATCH_QEMU` / `HATCH_GCC` 等环境变量指定）：
-
-| 命令 | 用途 |
-| --- | --- |
-| `qemu-system-i386` | 运行客户机 |
-| `nasm` | 汇编 |
-| `gcc` `ld` `objcopy` | 32 位 C 工程 |
+**机器上什么都不用先装。** 只需要 Python 3.11+ 和一条能上网的线：QEMU、NASM、32 位 gcc 会在首次启动时自己下到 `.work/tools`（约 280 MB，只下一次，不装进系统盘、不写注册表）。
 
 ```bash
 python -m venv .venv && .venv\Scripts\activate
 pip install -e ".[dev]"
 
-hatch              # 开窗口
+hatch              # 开窗口；首次会先把工具备齐
 hatch --serve      # 只起服务，浏览器开 http://127.0.0.1:8799
+hatch setup        # 只装工具，打印清单和路径，装完退出
 ```
 
-界面包已经提交在仓库里，装依赖只为**改**界面时才需要 Node。
+装完的样子：
+
+```
+nasm               就绪  .work\tools\nasm-2.16.03\nasm.exe
+qemu-system-i386   就绪  .work\tools\qemu\qemu-system-i386.exe
+gcc                就绪  .work\tools\w64devkit\bin\gcc.exe
+```
+
+下载走官方地址，带重试；断了重跑 `hatch setup` 即可，装好的不会重下。工具放在项目自己的 `.work/tools` 里（已被不断提交的 `.gitignore` 排除），删掉目录就等于卸载。
+
+公司网络挡住下载时，也可以自己装一份，用 `HATCH_QEMU` / `HATCH_NASM` / `HATCH_GCC` 指过去，优先级高于自动下载。仓库里也提交了带版本锁的 `package.json`，只有改界面才需要 `npm install`。
 
 ## 验收
 

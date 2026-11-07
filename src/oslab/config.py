@@ -22,28 +22,39 @@ ASSETS = os.path.join(ROOT, "assets")
 UI_DIR = os.path.join(ASSETS, "ui")
 WORKSPACE = os.path.join(PROJECT, "workspace")
 RUN_DIR = os.path.join(PROJECT, ".run")
-_BIN = os.path.join(PROJECT, ".work", "w64", "w64devkit", "bin")
-_ASM = os.path.join(PROJECT, "..", "osdev-lab", "tools", "nasm-3.02")
+_TOOLS = os.path.join(PROJECT, ".work", "tools")
+_BIN = os.path.join(_TOOLS, "w64devkit", "bin")
+_ASM = os.path.join(_TOOLS, "nasm-2.16.03")
 
 SENTINEL = "OSLAB_SYNC"
 
 
 def _tool(name, env, *hints):
-    """按 环境变量 → 随项目放的工具 → PATH 顺序找外装命令。
+    """按 环境变量 → 项目自带的工具 → PATH → 旧目录 顺序找外装命令。
 
-    硬编码的提示目录只是便利：换台机器时用环境变量或 PATH 覆盖即可。
+    项目自带的那些由 services/toolchain.py 下载到 .work/tools，
+    所以用户机器上什么都不用先装。
     """
     if os.environ.get(env):
         return os.environ[env]
+    managed = os.path.join(PROJECT, ".work", "tools")
+    for hint in hints:
+        if hint and hint.startswith(managed) and os.path.exists(hint):
+            return hint
+    found = shutil.which(name)
+    if found:
+        return found
     for hint in hints:
         if hint and os.path.exists(hint):
             return hint
-    return shutil.which(name) or (hints[0] if hints else name)
+    return hints[0] if hints else name
 
 
 NASM = _tool("nasm", "HATCH_NASM", os.path.join(_ASM, "nasm.exe"))
 OBJDUMP = _tool("objdump", "HATCH_OBJDUMP", os.path.join(_BIN, "objdump.exe"))
-QEMU = _tool("qemu-system-i386", "HATCH_QEMU", r"C:\Program Files\qemu\qemu-system-i386.exe")
+QEMU = _tool("qemu-system-i386", "HATCH_QEMU",
+             os.path.join(_TOOLS, "qemu", "qemu-system-i386.exe"),
+             r"C:\Program Files\qemu\qemu-system-i386.exe")
 C_GCC = _tool("gcc", "HATCH_GCC", os.path.join(_BIN, "gcc.exe"))
 C_LD = _tool("ld", "HATCH_LD", os.path.join(_BIN, "ld.exe"))
 C_OBJCOPY = _tool("objcopy", "HATCH_OBJCOPY", os.path.join(_BIN, "objcopy.exe"))
