@@ -27,7 +27,7 @@ def instance_taken():
 
 def prepare_tools(auto=True):
     """缺工具就装上；返回是否备齐。用户机器上可以什么都没有。"""
-    todo = toolchain.missing()
+    todo = toolchain.missing_packages()
     if not todo:
         return True
     titles = "、".join(toolchain.WINDOWS[name]["title"] for name in todo)

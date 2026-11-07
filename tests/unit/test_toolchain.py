@@ -70,3 +70,13 @@ def test_installed_tools_count_as_present():
     for binary in toolchain.BINARIES:
         attr = toolchain.BINARIES[binary][0]
         assert toolchain._have(binary) == os.path.isfile(getattr(config, attr))
+
+
+def test_prepare_tools_speaks_package_titles(monkeypatch):
+    """缺 gcc 时要说「w64devkit」，不能拿命令名去查包表。"""
+    from oslab import __main__ as entry
+
+    monkeypatch.setattr(toolchain, "missing_packages", lambda: ["w64devkit"])
+    monkeypatch.setattr(toolchain, "ensure", lambda log=print: [])
+    monkeypatch.setattr(entry, "prepare_tools", entry.prepare_tools)
+    assert entry.prepare_tools() is True

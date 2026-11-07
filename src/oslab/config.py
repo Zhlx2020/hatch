@@ -32,11 +32,13 @@ SENTINEL = "OSLAB_SYNC"
 def _tool(name, env, *hints):
     """按 环境变量 → 项目自带的工具 → PATH → 旧目录 顺序找外装命令。
 
+    环境变量写错了（指向不存在的文件）就当没写，免得一个笔误把能用的工具遮住。
     项目自带的那些由 services/toolchain.py 下载到 .work/tools，
     所以用户机器上什么都不用先装。
     """
-    if os.environ.get(env):
-        return os.environ[env]
+    override = os.environ.get(env)
+    if override and os.path.exists(override):
+        return override
     managed = os.path.join(PROJECT, ".work", "tools")
     for hint in hints:
         if hint and hint.startswith(managed) and os.path.exists(hint):
