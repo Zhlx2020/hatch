@@ -56,6 +56,8 @@ export const line = (path, row) =>
 
 export const serial = () => json("/api/serial");
 export const settings = () => json("/api/settings");
+export const disk = () => json("/api/disk");
+export const elf = () => json("/api/elf");
 export const saveSettings = (data) =>
   json("/api/settings", {
     method: "PUT",

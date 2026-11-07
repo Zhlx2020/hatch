@@ -29,6 +29,7 @@ class Session:
         self.arbiter = Arbiter()
         self.dir = make_qemu_dir()
         self.image = os.path.join(self.dir, "boot.img")
+        self.elf = os.path.join(self.dir, "kernel.elf")
         self.backend = None
         self.serial = None
         self.source = VncSource()

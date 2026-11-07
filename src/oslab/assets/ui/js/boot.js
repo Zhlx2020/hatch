@@ -167,6 +167,7 @@ function uniqueName(runs) {
 async function runAction(act) {
   document.getElementById("run-menu").classList.remove("open");
   if (act === "settings") return settings.open();
+  if (act === "disk" || act === "elf") return detail.open(act);
   if (act === "reset") return guarded(api.reset);
   if (act === "build") return boot(true);
   if (act === "new-config") return editConfig("new");

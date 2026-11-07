@@ -205,6 +205,26 @@ async def main():
         check("查不到时给原因", status == 200 and not missing.get("addr")
               and missing.get("reason"), str(missing))
 
+        # 磁盘布局与 ELF 结构 -------------------------------------------
+        status, layout = await get(session, "/api/disk")
+        kinds = [row.get("kind") for row in layout.get("regions") or []]
+        check("磁盘布局分段", status == 200 and "boot" in kinds and "code" in kinds
+              and layout.get("size") == 1474560, str(kinds))
+        fields = [row.get("k") for row in (layout["regions"][0].get("fields") or [])]
+        check("引导扇区逐项列出", "510-511 字节" in fields, str(fields))
+        check("行号落到镜像偏移", any(mark.get("offset") for mark in layout.get("marks") or []),
+              str(layout.get("marks"))[:80])
+        status, bad = await get(session, "/api/disk")
+        check("布局带签名检查结论", status == 200 and isinstance(layout.get("warnings"), list))
+
+        status, info = await get(session, "/api/elf")
+        names = [row.get("name") for row in info.get("sections") or []]
+        check("ELF 能读节表", status == 200 and ".text" in names
+              and info.get("machine") == "i386", str(names)[:80])
+        check("ELF 入口在代码里", info.get("entry") == 0x10000, str(info.get("entry")))
+        check("ELF 有符号", (info.get("symbol_total") or 0) >= 1,
+              str(info.get("symbol_total")))
+
         status, conf = await get(session, "/api/settings")
         check("读得到模板清单", status == 200 and len(conf.get("profiles") or []) >= 5
               and conf["qemu"]["profile"], str(conf)[:80])

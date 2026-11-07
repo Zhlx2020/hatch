@@ -385,6 +385,162 @@ async function renderDisasm() {
   commit();
 }
 
+// disk: 镜像在磁盘上的样子 --------------------------------------------
+const HUMAN = (bytes) => (bytes >= 1024 ? (bytes / 1024).toFixed(1) + " KB" : bytes + " B");
+
+function bar(regions, total) {
+  const row = document.createElement("div");
+  row.className = "map";
+  for (const region of regions) {
+    const slice = document.createElement("span");
+    slice.className = "slice " + (region.kind || "unknown");
+    slice.style.width = Math.max(1, (region.size / total) * 100) + "%";
+    slice.title = region.kind_name + " · " + region.offset + "（" + HUMAN(region.size) + "）";
+    slice.addEventListener("click", () => {
+      bodyEl.querySelector(`[data-offset="${region.offset}"]`)?.scrollIntoView({ block: "center" });
+    });
+    row.append(slice);
+  }
+  return row;
+}
+
+async function renderDisk() {
+  begin();
+  const data = await api.disk();
+  if (data.error) {
+    note(data.error);
+    return commit();
+  }
+  const bar0 = head("镜像 " + data.size + " 字节 · " + data.sectors + " 扇区 · 有效 "
+    + HUMAN(data.used) + " · 全零 " + HUMAN(data.zero));
+  add(bar0, bar(data.regions || [], data.size || 1));
+  const HEAD = 65536;
+  const zoom = (data.regions || []).filter((one) => one.offset < HEAD)
+    .map((one) => ({ ...one, size: Math.min(one.size, HEAD - one.offset) }));
+  add(head("前 64 KB 放大（整盘里这一段只有几个像素）"), bar(zoom, HEAD));
+
+  for (const text of data.warnings || []) {
+    const line = document.createElement("p");
+    line.className = "warn";
+    line.textContent = "⚠ " + text;
+    add(line);
+  }
+
+  const marks = new Map();
+  for (const mark of data.marks || []) {
+    if (!marks.has(mark.offset)) marks.set(mark.offset, []);
+    marks.get(mark.offset).push(mark);
+  }
+
+  for (const region of data.regions || []) {
+    const row = document.createElement("div");
+    row.className = "region " + (region.kind || "unknown");
+    row.dataset.offset = region.offset;
+    row.append(cell("0x" + region.offset.toString(16).padStart(6, "0"), "addr"));
+    row.append(cell(HUMAN(region.size), "size"));
+    row.append(cell(region.kind_name, "tag"));
+    row.append(cell(region.label, "label"));
+    add(row);
+    if (region.note) {
+      const p = document.createElement("p");
+      p.className = "dim small";
+      p.textContent = region.note;
+      add(p);
+    }
+    if (region.hex) {
+      const p = document.createElement("p");
+      p.className = "bytes";
+      p.textContent = region.hex + " …";
+      add(p);
+    }
+    for (const item of region.fields || []) {
+      const line = document.createElement("div");
+      line.className = "field-row";
+      line.append(cell(item.k, "tag"), cell(item.v, "value"));
+      add(line);
+      const p = document.createElement("p");
+      p.className = "dim small";
+      p.textContent = item.note;
+      add(p);
+    }
+    if (marks.has(region.offset)) {
+      for (const mark of marks.get(region.offset)) {
+        const p = document.createElement("div");
+        p.className = "field-row";
+        p.append(cell("行 " + mark.line, "tag"), cell(mark.addr, "value"));
+        add(p);
+      }
+    }
+  }
+  note("大小按扇区算，灰色是补到软盘容量的部分。点色条跳到对应段。");
+  commit();
+}
+
+// elf: 链接产物的结构 --------------------------------------------------
+function elfBytes(text) {
+  if (text >= 1024) return (text / 1024).toFixed(1) + " KB";
+  return text + " B";
+}
+
+async function renderElf() {
+  begin();
+  const data = await api.elf();
+  if (data.error) {
+    note(data.error);
+    return commit();
+  }
+  add(head(data.path + " · " + data.bits + " 位 " + data.endian + " · " + data.machine
+    + " · " + data.type));
+  add(head("入口 0x" + num(data.entry).toString(16).padStart(8, "0")
+    + " · 文件 " + elfBytes(data.size) + " · 可装入段 " + elfBytes(data.allocated || 0)));
+
+  for (const text of data.warnings || []) {
+    const line = document.createElement("p");
+    line.className = "warn";
+    line.textContent = "⚠ " + text;
+    add(line);
+  }
+
+  if ((data.segments || []).length) {
+    add(head("程序头（装载器看这里）"));
+    for (const seg of data.segments) {
+      const line = document.createElement("div");
+      line.className = "field-row segment";
+      line.append(cell(String(seg.index), "tag"), cell(seg.flags, "flag"),
+        cell("0x" + num(seg.vaddr).toString(16).padStart(8, "0"), "value"),
+        cell(elfBytes(seg.filesz) + " / 内存 " + elfBytes(seg.memsz), "dim"),
+        cell("对齐 " + seg.align, "dim"));
+      add(line);
+    }
+  }
+
+  add(head("节（" + (data.sections || []).length + " 节）"));
+  for (const section of data.sections || []) {
+    const line = document.createElement("div");
+    line.className = "field-row section";
+    line.append(cell("[" + section.index + "]", "tag"));
+    line.append(cell(section.name || "（无名）", "value"));
+    line.append(cell(section.flags, "flag"));
+    line.append(cell("0x" + num(section.addr).toString(16).padStart(8, "0"), "addr"));
+    line.append(cell(section.type, "dim"));
+    line.append(cell(elfBytes(section.size), "size"));
+    add(line);
+  }
+
+  if (data.symbol_total) {
+    add(head("符号 " + data.symbol_total + " 个" + (data.symbol_total > 200 ? "，先显示 200" : "")));
+    for (const symbol of data.symbols || []) {
+      const line = document.createElement("div");
+      line.className = "field-row symbol";
+      line.append(cell(symbol.value, "addr"), cell(symbol.kind, "tag"),
+        cell(symbol.section, "dim"), cell(symbol.name, "value"));
+      add(line);
+    }
+  }
+  note("节对齐、可写+可执行、入口落在哪里都会被标出来；这是 objcopy 转出来的调试件：地址与磁盘镜像一致，节比镜像里多。");
+  commit();
+}
+
 function note(text) {
   const p = document.createElement("p");
   p.className = "dim";
@@ -400,6 +556,8 @@ async function draw() {
   }
   if (tab === "regs") return renderRegs(await api.regs());
   if (tab === "mem") return renderMem();
+  if (tab === "disk") return renderDisk();
+  if (tab === "elf") return renderElf();
   return renderDisasm();
 }
 

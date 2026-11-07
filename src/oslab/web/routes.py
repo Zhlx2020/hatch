@@ -22,6 +22,8 @@ ROUTES = [
     ("POST", "/api/cont", handlers.cont),
     ("POST", "/api/pause", handlers.pause),
     ("GET", "/api/serial", handlers.serial),
+    ("GET", "/api/disk", handlers.disk),
+    ("GET", "/api/elf", handlers.elf),
     ("POST", "/api/reset", handlers.reset),
     ("POST", "/api/bp", handlers.bp_add),
     ("DELETE", "/api/bp/{addr}", handlers.bp_del),

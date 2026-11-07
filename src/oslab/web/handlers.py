@@ -6,7 +6,7 @@ from aiohttp import web
 
 from .. import config
 from ..core.errors import OsLabError
-from ..services import checker, settings, templates, workspace
+from ..services import checker, diskmap, elfview, settings, templates, workspace
 from . import state as shared
 
 
@@ -223,6 +223,31 @@ async def cont(_request):
 
 async def serial(_request):
     return web.json_response({"text": await asyncio.to_thread(session().serial_tail)})
+
+
+async def disk(_request):
+    """当前镜像在磁盘上长什么样：段、签名、分区表、行号落点。"""
+    live = session()
+    if not os.path.isfile(live.image):
+        return web.json_response({"error": "还没构建过镜像"})
+    marks = [{"line": line, "file": live.file, "addr": addr}
+             for line, addr in (getattr(live, "line_map", {}) or {}).get(live.file, {}).items()]
+    try:
+        data = await asyncio.to_thread(diskmap.describe, live.image, marks)
+    except OSError as exc:
+        return web.json_response({"error": str(exc)})
+    data["file"] = live.file
+    return web.json_response(data)
+
+
+async def elf(_request):
+    """链接产物的 ELF 结构：头、程序头、节、符号。"""
+    live = session()
+    try:
+        data = await asyncio.to_thread(elfview.describe, live.elf)
+    except OsLabError as exc:
+        return web.json_response({"error": str(exc)})
+    return web.json_response(data)
 
 
 async def pause(_request):

@@ -30,6 +30,15 @@ OS 开发最烦的不是写不出那几十行汇编，而是**验证一次要切
 
 ![运行配置](docs/shot-runs.jpg)
 
+**镜像摊开给你看**：构建完按一下，镜像被拆成引导扇区、代码、填充几段，逐段标偏移、大小、头几个字节；引导扇区里的开头指令、OEM 字节、分区表项、`0xAA55` 签名逐条点名，行号对应的机器码落点也标在偏移上。签名不对、分区越界、镜像不是整扇区都会当场告警。
+
+![磁盘布局](docs/shot-disk.jpg)
+
+**ELF 不靠外部工具**：C 工程构建时同时产出 ELF 调试件（地址与镜像一致），面板里读得出文件头、程序头、每一节的权限与对齐、符号表，入口不在可执行节、节既可写又可执行这类毛病直接标红。
+
+![ELF 结构](docs/shot-elf.jpg)
+
+
 **文件树是正经对话框**：新建时按扩展名标出语言，重名、非法字符、保留名当场提示；删除目录会先说清楚连带删几项。
 
 ![新建文件](docs/shot-dialog.jpg)
@@ -120,7 +129,7 @@ templ/         代码模板
 tests/         单元与端到端
 ```
 
-分层与数据流见 [docs/architecture.md](docs/architecture.md)，文件规则见 [docs/workspace.md](docs/workspace.md)，C 工程见 [docs/c.md](docs/c.md)，设计取舍见 [docs/decisions](docs/decisions)。
+分层与数据流见 [docs/architecture.md](docs/architecture.md)，文件规则见 [docs/workspace.md](docs/workspace.md)，C 工程见 [docs/c.md](docs/c.md)，布局与 ELF 视图见 [docs/inspect.md](docs/inspect.md)，设计取舍见 [docs/decisions](docs/decisions)。
 
 ## 已知限制
 

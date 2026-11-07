@@ -12,7 +12,7 @@ import subprocess
 
 from .. import config
 from ..core.errors import AssembleError
-from . import disasm, linemap, workspace
+from . import diskmap, disasm, linemap, workspace
 
 SECTOR = 512
 FLOPPY = 1474560
@@ -71,9 +71,20 @@ def compile_project(plan, image, base=None, text=None):
           "-j", ".text", "-j", ".rdata", "-j", ".rodata", "-j", ".data",
           kernel, flat], env)
 
+    # 同一份产物另存成 ELF：地址不变，但节与段的边界是写明的，能拿来看
+    elf = os.path.join(out_dir, "kernel.elf")
+    try:
+        _run([tool("objcopy"), "-O", "elf32-i386", kernel, elf], env)
+    except AssembleError:
+        elf = ""
+
     stub = os.path.join(out_dir, "stub.bin")
     _run([config.NASM, "-f", "bin", workspace.full(plan["boot"], base), "-o", stub])
 
+    diskmap.record(image, [(0, SECTOR, "boot", "引导扇区 %s（载入 0x%x）"
+                            % (os.path.basename(plan["boot"]), plan["base"]), plan["base"]),
+                           (SECTOR, os.path.getsize(flat), "code",
+                            "内核负载（从 0x%x 起）" % KERNEL_BASE, KERNEL_BASE)])
     _compose(image, stub, flat)
     disasm.build_split(image, [(stub, plan["base"], 16), (flat, KERNEL_BASE, 32)])
     return image, linemap.from_objects(config.OBJDUMP, kernel, plan,

@@ -9,7 +9,7 @@ import subprocess
 
 from .. import config
 from ..core.errors import AssembleError
-from . import disasm
+from . import disasm, diskmap
 
 SECTOR = 512
 FLOPPY = 1474560
@@ -28,6 +28,9 @@ def assemble(source, out_path, includes=()):
     if result.returncode != 0:
         raise AssembleError(_clean(result.stderr) or "汇编失败")
     size = os.path.getsize(out_path)
+    diskmap.record(out_path, [(0, min(size, SECTOR), "boot", "引导扇区 %s" % asm, 0x7C00),
+                              (SECTOR, max(0, size - SECTOR), "code",
+                               "汇编产物（多扇区负载）", 0x7C00 + SECTOR)])
     if size > FLOPPY:
         raise AssembleError("产物 %d 字节，超过软盘容量" % size)
     with open(out_path, "rb") as fh:
