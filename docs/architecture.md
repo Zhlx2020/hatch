@@ -36,6 +36,8 @@ QEMU 5901 → display.vnc（原样转发 32bpp）→ ws → 画布（BGRX→RGBA
 客户机 COM1 → chardev 5914 → services.serial → /api/serial（可回放，界面不显示）
 保存 → services.checker → nasm/cc → 诊断行（编辑器标红）
 点行号 → services.linemap（nasm 列表或 objdump -dl）→ 地址 → gdb 断点
+停在断点上再点继续 → 先把那条 int3 单步迈过去、再把断点下回去，然后才 cont（不然一 cont 立刻又撞回原地）
+重新运行 → 手动断点不清空，重启后照地址重新下回去
 组装 → nasm -l 或 gcc+ld+objcopy → services.sourcemap → 暂停时标记当前源码行
 ```
 

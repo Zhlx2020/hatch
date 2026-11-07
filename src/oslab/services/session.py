@@ -117,6 +117,7 @@ class Session:
                 self.backend.on_stop = self._on_stop
                 if not self._await_ready():
                     raise OsLabError("模拟器未就绪")
+                kept = sorted(self.bps)   # 手动断点跨次运行不丢，重启后重新下回去
                 self.bps.clear()
                 # 红点在构建后才有地址：先写断点，再放行，避免跑过头
                 placed = []
@@ -125,6 +126,8 @@ class Session:
                     if addr:
                         self.add_breakpoint(addr)
                         placed.append("%08x" % addr)
+                for addr in kept:
+                    self.add_breakpoint(addr)
                 self.serial = SerialBuffer(None)
                 deadline = time.time() + 2.0
                 while time.time() < deadline and not self.serial.connected:
@@ -200,8 +203,25 @@ class Session:
     # control --------------------------------------------------------
     def cont(self):
         self.arbiter.guard(state.STOPPED, state.RUNNING)
+        backend = self._need_backend()
+        stuck = None
+        # 停在断点上再继续，先把那条 int3 迈过去，不然一 cont 立刻又撞回同一个点。
+        if self.bps:
+            try:
+                here = backend.eip() & 0xFFFFFFFF
+            except (BackendError, OSError, TimeoutError):
+                here = None
+            if here in self.bps:
+                stuck = here
         self.arbiter.to(state.RUNNING, "cont")     # 先立状态，回调才有处落脚
-        self._need_backend().cont()
+        if stuck is not None:
+            backend.unbreak(stuck)
+            try:
+                backend.step()
+            finally:
+                backend.break_at(stuck)
+            self.arbiter.to(state.RUNNING, "cont")  # step 的停机回调把状态压回了 STOPPED
+        backend.cont()
         return self.arbiter.state
 
     def _on_stop(self, packet):
