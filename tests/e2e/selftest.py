@@ -236,6 +236,7 @@ async def main():
                                   {"path": "boot/main.asm", "word": "mov"})
         check("跳不到的给空表", status == 200 and none.get("hits") == [])
 
+        await delete(session, "/api/bookmarks", {"file": "boot/main.asm"})
         status, marked = await post(session, "/api/bookmarks",
                                     {"file": "boot/main.asm", "line": 3, "text": "jmp start"})
         check("能加书签", status == 200 and marked.get("on") is True

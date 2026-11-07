@@ -4,11 +4,6 @@
    "file": "demo-c/src/kmain.c",
    "line": 7,
    "text": "screen_clear();"
-  },
-  {
-   "file": "boot/main.asm",
-   "line": 6,
-   "text": "start:"
   }
  ]
 }
